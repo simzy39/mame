@@ -151,7 +151,7 @@ public:
 
 	/* core read access */
 	bool read_data(uint32_t lbasector, void *buffer, uint32_t datatype, bool phys=false);
-	bool read_subcode(uint32_t lbasector, void *buffer, bool phys=false) const;
+	bool read_subcode(uint32_t lbasector, void *buffer, bool phys=false);
 	bool get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys=false) const;
 
 	/* handy utilities */
