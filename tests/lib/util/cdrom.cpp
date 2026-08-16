@@ -41,18 +41,30 @@ TEST_CASE("CD-ROM Q subchannel indexes", "[util][cdrom]")
 	// Last frame of INDEX 01.
 	REQUIRE(cd.get_subcode_q(224, q));
 	REQUIRE(q[2] == 0x01);
+	REQUIRE(q[7] == 0x00);
+	REQUIRE(q[8] == 0x04);
+	REQUIRE(q[9] == 0x74);
 
 	// First frame of INDEX 02.
 	REQUIRE(cd.get_subcode_q(225, q));
 	REQUIRE(q[2] == 0x02);
+	REQUIRE(q[7] == 0x00);
+	REQUIRE(q[8] == 0x05);
+	REQUIRE(q[9] == 0x00);
 
 	// Last frame of INDEX 02.
 	REQUIRE(cd.get_subcode_q(449, q));
 	REQUIRE(q[2] == 0x02);
+	REQUIRE(q[7] == 0x00);
+	REQUIRE(q[8] == 0x07);
+	REQUIRE(q[9] == 0x74);
 
 	// First frame of INDEX 03.
 	REQUIRE(cd.get_subcode_q(450, q));
 	REQUIRE(q[2] == 0x03);
+	REQUIRE(q[7] == 0x00);
+	REQUIRE(q[8] == 0x08);
+	REQUIRE(q[9] == 0x00);
 
 	std::filesystem::remove_all(tempdir);
 }
@@ -88,13 +100,17 @@ TEST_CASE("CD-ROM Q subchannel pregap", "[util][cdrom]")
 
 	uint8_t q[12];
 
-	// First frame of INDEX 00.  The relative address counts
-	// backwards towards INDEX 01.
+	// First frame of INDEX 00.
+	// Relative time counts backwards to INDEX 01.
+	// Absolute disc position starts at 00:00:00.
 	REQUIRE(cd.get_subcode_q(0, q, true));
 	REQUIRE(q[2] == 0x00);
 	REQUIRE(q[3] == 0x00);
 	REQUIRE(q[4] == 0x02);
 	REQUIRE(q[5] == 0x00);
+	REQUIRE(q[7] == 0x00);
+	REQUIRE(q[8] == 0x00);
+	REQUIRE(q[9] == 0x00);
 
 	// Last frame of INDEX 00.
 	REQUIRE(cd.get_subcode_q(149, q, true));
@@ -102,25 +118,37 @@ TEST_CASE("CD-ROM Q subchannel pregap", "[util][cdrom]")
 	REQUIRE(q[3] == 0x00);
 	REQUIRE(q[4] == 0x00);
 	REQUIRE(q[5] == 0x01);
+	REQUIRE(q[7] == 0x00);
+	REQUIRE(q[8] == 0x01);
+	REQUIRE(q[9] == 0x74);
 
-	// INDEX 01 starts at relative 00:00:00.
+	// INDEX 01 begins at disc LBA 0 / absolute MSF 00:02:00.
 	REQUIRE(cd.get_subcode_q(150, q, true));
 	REQUIRE(q[2] == 0x01);
 	REQUIRE(q[3] == 0x00);
 	REQUIRE(q[4] == 0x00);
 	REQUIRE(q[5] == 0x00);
+	REQUIRE(q[7] == 0x00);
+	REQUIRE(q[8] == 0x02);
+	REQUIRE(q[9] == 0x00);
 
 	// Last frame before INDEX 02.
 	REQUIRE(cd.get_subcode_q(374, q, true));
 	REQUIRE(q[2] == 0x01);
+	REQUIRE(q[7] == 0x00);
+	REQUIRE(q[8] == 0x04);
+	REQUIRE(q[9] == 0x74);
 
-	// INDEX 02 starts three seconds after INDEX 01.  The relative
-	// address continues to be relative to the track, not INDEX 02.
+	// INDEX 02 begins three seconds after INDEX 01.
+	// Relative address remains track-relative.
 	REQUIRE(cd.get_subcode_q(375, q, true));
 	REQUIRE(q[2] == 0x02);
 	REQUIRE(q[3] == 0x00);
 	REQUIRE(q[4] == 0x03);
 	REQUIRE(q[5] == 0x00);
+	REQUIRE(q[7] == 0x00);
+	REQUIRE(q[8] == 0x05);
+	REQUIRE(q[9] == 0x00);
 
 	std::filesystem::remove_all(tempdir);
 }
