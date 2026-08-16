@@ -193,3 +193,69 @@ TEST_CASE("CD-ROM Q subchannel pregap", "[util][cdrom]")
 
 	std::filesystem::remove_all(tempdir);
 }
+
+TEST_CASE("CD-ROM Q subchannel stored RW_RAW", "[util][cdrom]")
+{
+	const std::filesystem::path tempdir =
+			std::filesystem::temp_directory_path() / "mame-cdrom-q-raw-test";
+	const std::filesystem::path binpath = tempdir / "raw.bin";
+	const std::filesystem::path tocpath = tempdir / "raw.toc";
+
+	std::filesystem::remove_all(tempdir);
+	std::filesystem::create_directories(tempdir);
+
+	// Make a distinctive, valid Q packet that cannot be confused with
+	// the Q data synthesized from this track's TOC.
+	uint8_t stored_q[12] =
+	{
+		0x01,       // ADR=1, CONTROL=0
+		0x01,       // track 1
+		0x07,       // deliberately use INDEX 07
+		0x00, 0x12, 0x34,
+		0x00,
+		0x00, 0x56, 0x12,
+		0x00, 0x00
+	};
+
+	const uint16_t crc = reference_q_crc(stored_q);
+	stored_q[10] = uint8_t(crc >> 8);
+	stored_q[11] = uint8_t(crc);
+
+	uint8_t raw_subcode[96];
+	interleave_q_raw(stored_q, raw_subcode);
+
+	// One AUDIO RW_RAW sector is 2352 bytes of CDDA followed by
+	// 96 bytes of raw interleaved P-W subchannel data.
+	{
+		std::ofstream bin(binpath, std::ios::binary);
+
+		const std::vector<char> audio(2352, 0);
+		bin.write(audio.data(), audio.size());
+		bin.write(
+				reinterpret_cast<const char *>(raw_subcode),
+				sizeof(raw_subcode));
+	}
+
+	{
+		std::ofstream toc(tocpath);
+		toc <<
+				"CD_DA\n"
+				"\n"
+				"TRACK AUDIO RW_RAW\n"
+				"DATAFILE \"raw.bin\" 00:00:01\n";
+	}
+
+	cdrom_file cd(tocpath.string());
+
+	uint8_t q[12];
+
+	REQUIRE(cd.get_subcode_q(0, q));
+
+	// Stored RW_RAW Q must take precedence over synthesized Q.
+	for (int i = 0; i < 12; i++)
+		REQUIRE(q[i] == stored_q[i]);
+
+	require_valid_q_crc(q);
+
+	std::filesystem::remove_all(tempdir);
+}
