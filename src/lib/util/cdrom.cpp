@@ -608,7 +608,12 @@ bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) c
 	}
 
 	const uint32_t relmsf = lba_to_msf(relframe);
-	const uint32_t absmsf = lba_to_msf(lbasector + 150);
+	const uint32_t absolute_frame =
+		phys
+				? lbasector + 150 - cdtoc.tracks[0].pregap
+				: lbasector + 150;
+
+	const uint32_t absmsf = lba_to_msf(absolute_frame);
 	const uint8_t adrcontrol = get_adr_control(tracknum);
 
 	buffer[0] = ((adrcontrol & 0x0f) << 4) | ((adrcontrol & 0xf0) >> 4);
