@@ -39,12 +39,14 @@ project("mametests")
 	configuration { }
 
 	links {
-		"utils",
-		ext_lib("expat"),
-		ext_lib("zlib"),
-		ext_lib("flac"),
-		ext_lib("zstd"),
-		"ocore_" .. _OPTIONS["osd"],
+	"utils",
+	ext_lib("expat"),
+	"7z",
+	ext_lib("zlib"),
+	ext_lib("flac"),
+	ext_lib("zstd"),
+	ext_lib("utf8proc"),
+	"ocore_" .. _OPTIONS["osd"],
 	}
 
 	includedirs {
