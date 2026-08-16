@@ -43,6 +43,7 @@ project("mametests")
 		ext_lib("expat"),
 		ext_lib("zlib"),
 		ext_lib("flac"),
+		ext_lib("zstd"),
 		"ocore_" .. _OPTIONS["osd"],
 	}
 
