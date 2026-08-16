@@ -152,6 +152,7 @@ public:
 	/* core read access */
 	bool read_data(uint32_t lbasector, void *buffer, uint32_t datatype, bool phys=false);
 	bool read_subcode(uint32_t lbasector, void *buffer, bool phys=false);
+	bool get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys=false) const;
 
 	/* handy utilities */
 	uint32_t get_track(uint32_t frame) const;
@@ -285,6 +286,8 @@ private:
 
 	inline uint32_t physical_to_chd_lba(uint32_t physlba, uint32_t &tracknum) const;
 	inline uint32_t logical_to_chd_lba(uint32_t physlba, uint32_t &tracknum) const;
+	static uint32_t get_track_index(const track_info &track, uint32_t frame);
+	static uint16_t subcode_q_crc(const uint8_t *data);
 
 	static void reset_toc(toc &toc);
 	static void get_info_from_type_string(const char *typestring, uint32_t *trktype, uint32_t *datasize);
