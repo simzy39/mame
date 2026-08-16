@@ -548,7 +548,7 @@ bool cdrom_file::read_data(uint32_t lbasector, void *buffer, uint32_t datatype, 
  * @return  false on failure.
  */
 
-bool cdrom_file::read_subcode(uint32_t lbasector, void *buffer, bool phys) const
+bool cdrom_file::read_subcode(uint32_t lbasector, void *buffer, bool phys)
 {
 	// compute CHD sector and tracknumber
 	uint32_t tracknum = 0;
@@ -609,7 +609,7 @@ bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) c
 	{
 		uint8_t subcode[96];
 
-		if (read_subcode(lbasector, subcode, phys))
+		if (const_cast<cdrom_file *>(this)->read_subcode(lbasector, subcode, phys))
 		{
 			extract_q_raw(subcode, buffer);
 
