@@ -56,3 +56,56 @@ TEST_CASE("CD-ROM Q subchannel indexes", "[util][cdrom]")
 
 	std::filesystem::remove_all(tempdir);
 }
+
+
+TEST_CASE("CD-ROM Q subchannel pregap", "[util][cdrom]")
+{
+	const std::filesystem::path tempdir =
+			std::filesystem::temp_directory_path() / "mame-cdrom-q-pregap-test";
+	const std::filesystem::path binpath = tempdir / "pregap.bin";
+	const std::filesystem::path cuepath = tempdir / "pregap.cue";
+
+	std::filesystem::remove_all(tempdir);
+	std::filesystem::create_directories(tempdir);
+
+	{
+		std::ofstream bin(binpath, std::ios::binary);
+		const std::vector<char> data(8 * 75 * 2352, 0);
+		bin.write(data.data(), data.size());
+	}
+
+	{
+		std::ofstream cue(cuepath);
+		cue <<
+				"FILE \"pregap.bin\" BINARY\n"
+				"  TRACK 01 AUDIO\n"
+				"    INDEX 00 00:00:00\n"
+				"    INDEX 01 00:02:00\n"
+				"    INDEX 02 00:05:00\n";
+	}
+
+	cdrom_file cd(cuepath.string());
+
+	uint8_t q[12];
+
+	// First frame of the pregap is INDEX 00.
+	REQUIRE(cd.get_subcode_q(0, q, true));
+	REQUIRE(q[2] == 0x00);
+
+	// Last frame before INDEX 01 is still INDEX 00.
+	REQUIRE(cd.get_subcode_q(149, q, true));
+	REQUIRE(q[2] == 0x00);
+
+	// INDEX 01 begins after the 150-frame pregap.
+	REQUIRE(cd.get_subcode_q(150, q, true));
+	REQUIRE(q[2] == 0x01);
+
+	// INDEX 02 begins three seconds after INDEX 01.
+	REQUIRE(cd.get_subcode_q(374, q, true));
+	REQUIRE(q[2] == 0x01);
+
+	REQUIRE(cd.get_subcode_q(375, q, true));
+	REQUIRE(q[2] == 0x02);
+
+	std::filesystem::remove_all(tempdir);
+}
