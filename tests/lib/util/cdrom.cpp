@@ -33,6 +33,11 @@ static void require_valid_q_crc(const uint8_t *q)
 	REQUIRE(q[11] == uint8_t(crc));
 }
 
+static void interleave_q_raw(const uint8_t *q, uint8_t *sub)
+{
+	for (int i = 0; i < 96; i++)
+		sub[i] = ((q[i >> 3] >> (7 - (i & 7))) & 1) ? 0x40 : 0x00;
+}
 
 TEST_CASE("CD-ROM Q subchannel indexes", "[util][cdrom]")
 {
