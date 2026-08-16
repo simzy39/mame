@@ -571,7 +571,61 @@ bool cdrom_file::read_subcode(uint32_t lbasector, void *buffer, bool phys)
 	return !err;
 }
 
+bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) const
+{
+	uint32_t tracknum = 0;
 
+	if (phys)
+		physical_to_chd_lba(lbasector, tracknum);
+	else
+		logical_to_chd_lba(lbasector, tracknum);
+
+	const track_info &track = cdtoc.tracks[tracknum];
+
+	uint32_t track_start;
+	if (phys)
+		track_start = track.physframeofs + track.pregap;
+	else
+		track_start = track.logframeofs;
+
+	uint32_t index;
+	uint32_t relframe;
+
+	if (lbasector < track_start)
+	{
+		index = 0;
+		relframe = track_start - lbasector;
+	}
+	else
+	{
+		relframe = lbasector - track_start;
+		index = get_track_index(track, relframe);
+	}
+
+	const uint32_t relmsf = lba_to_msf(relframe);
+	const uint32_t absmsf = lba_to_msf(lbasector + 150);
+	const uint8_t adrcontrol = get_adr_control(tracknum);
+
+	buffer[0] = ((adrcontrol & 0x0f) << 4) | ((adrcontrol & 0xf0) >> 4);
+	buffer[1] = dec_2_bcd(tracknum + 1);
+	buffer[2] = dec_2_bcd(index);
+
+	buffer[3] = (relmsf >> 16) & 0xff;
+	buffer[4] = (relmsf >> 8) & 0xff;
+	buffer[5] = relmsf & 0xff;
+
+	buffer[6] = 0;
+
+	buffer[7] = (absmsf >> 16) & 0xff;
+	buffer[8] = (absmsf >> 8) & 0xff;
+	buffer[9] = absmsf & 0xff;
+
+	const uint16_t crc = subcode_q_crc(buffer);
+	buffer[10] = crc >> 8;
+	buffer[11] = crc;
+
+	return true;
+}
 
 /***************************************************************************
     HANDY UTILITIES
@@ -602,26 +656,45 @@ uint32_t cdrom_file::get_track(uint32_t frame) const
 	return track;
 }
 
-uint32_t cdrom_file::get_track_index(uint32_t frame) const
+uint32_t cdrom_file::get_track_index(const track_info &track, uint32_t frame)
 {
-	const uint32_t track = get_track(frame);
-	const uint32_t track_start = get_track_start(track);
-	const uint32_t index_offset = frame - track_start;
-	const track_info &trackinfo = cdtoc.tracks[track];
-	int index = 1;
+	uint32_t index = 1;
 
 	for (int i = 2; i <= MAX_INDEX; i++)
 	{
-		if (trackinfo.idx[i] == -1)
+		if (track.idx[i] == -1)
 			continue;
 
-		if (index_offset >= trackinfo.idx[i])
+		if (frame >= uint32_t(track.idx[i]))
 			index = i;
 		else
 			break;
 	}
 
 	return index;
+}
+
+uint16_t cdrom_file::subcode_q_crc(const uint8_t *data)
+{
+	uint16_t crc = 0;
+
+	for (int byte = 0; byte < 10; byte++)
+	{
+		crc ^= uint16_t(data[byte]) << 8;
+
+		for (int bit = 0; bit < 8; bit++)
+			crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) : (crc << 1);
+	}
+
+	return ~crc;
+}
+
+uint32_t cdrom_file::get_track_index(uint32_t frame) const
+{
+	const uint32_t track = get_track(frame);
+	const uint32_t track_start = get_track_start(track);
+
+	return get_track_index(cdtoc.tracks[track], frame - track_start);
 }
 
 
