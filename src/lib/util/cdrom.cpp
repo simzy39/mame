@@ -576,6 +576,24 @@ static uint8_t to_bcd(uint32_t value)
 	return ((value / 10) << 4) | (value % 10);
 }
 
+static void extract_q_raw(const uint8_t *subcode, uint8_t *q)
+{
+	for (int byte = 0; byte < 12; byte++)
+	{
+		uint8_t value = 0;
+
+		for (int bit = 0; bit < 8; bit++)
+		{
+			value <<= 1;
+
+			if (subcode[(byte * 8) + bit] & 0x40)
+				value |= 1;
+		}
+
+		q[byte] = value;
+	}
+}
+
 bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) const
 {
 	uint32_t tracknum = 0;
@@ -587,6 +605,22 @@ bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) c
 
 	const track_info &track = cdtoc.tracks[tracknum];
 
+	if ((track.subtype == CD_SUB_RAW) && (track.subsize == 96))
+	{
+		uint8_t subcode[96];
+
+		if (const_cast<cdrom_file *>(this)->read_subcode(lbasector, subcode, phys))
+		{
+			extract_q_raw(subcode, buffer);
+
+			const uint16_t stored_crc =
+					(uint16_t(buffer[10]) << 8) | buffer[11];
+
+			if (subcode_q_crc(buffer) == stored_crc)
+				return true;
+		}
+	}
+	
 	uint32_t track_start;
 	if (phys)
 		track_start = track.physframeofs + track.pregap;
