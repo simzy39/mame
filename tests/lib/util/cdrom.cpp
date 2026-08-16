@@ -88,24 +88,48 @@ TEST_CASE("CD-ROM Q subchannel pregap", "[util][cdrom]")
 
 	uint8_t q[12];
 
-	// First frame of the pregap is INDEX 00.
+	// First frame of the pregap:
+	// INDEX 00 and two seconds remaining until INDEX 01.
 	REQUIRE(cd.get_subcode_q(0, q, true));
 	REQUIRE(q[2] == 0x00);
+	REQUIRE(q[3] == 0x00);
+	REQUIRE(q[4] == 0x02);
+	REQUIRE(q[5] == 0x00);
+	REQUIRE(q[10] == 0x6d);
+	REQUIRE(q[11] == 0x68);
 
-	// Last frame before INDEX 01 is still INDEX 00.
+	// Last frame before INDEX 01:
+	// INDEX 00 with one frame remaining.
 	REQUIRE(cd.get_subcode_q(149, q, true));
 	REQUIRE(q[2] == 0x00);
+	REQUIRE(q[3] == 0x00);
+	REQUIRE(q[4] == 0x00);
+	REQUIRE(q[5] == 0x01);
+	REQUIRE(q[10] == 0x41);
+	REQUIRE(q[11] == 0x5b);
 
-	// INDEX 01 begins after the 150-frame pregap.
+	// First frame of INDEX 01:
+	// relative time resets to 00:00:00.
 	REQUIRE(cd.get_subcode_q(150, q, true));
 	REQUIRE(q[2] == 0x01);
+	REQUIRE(q[3] == 0x00);
+	REQUIRE(q[4] == 0x00);
+	REQUIRE(q[5] == 0x00);
+	REQUIRE(q[10] == 0x0b);
+	REQUIRE(q[11] == 0x5d);
 
-	// INDEX 02 begins three seconds after INDEX 01.
+	// Last frame of INDEX 01 before INDEX 02.
 	REQUIRE(cd.get_subcode_q(374, q, true));
 	REQUIRE(q[2] == 0x01);
 
+	// INDEX 02 begins three seconds after INDEX 01.
 	REQUIRE(cd.get_subcode_q(375, q, true));
 	REQUIRE(q[2] == 0x02);
+	REQUIRE(q[3] == 0x00);
+	REQUIRE(q[4] == 0x03);
+	REQUIRE(q[5] == 0x00);
+	REQUIRE(q[10] == 0x58);
+	REQUIRE(q[11] == 0x9b);
 
 	std::filesystem::remove_all(tempdir);
 }
