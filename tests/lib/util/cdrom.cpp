@@ -95,8 +95,8 @@ TEST_CASE("CD-ROM Q subchannel pregap", "[util][cdrom]")
 	REQUIRE(q[3] == 0x00);
 	REQUIRE(q[4] == 0x02);
 	REQUIRE(q[5] == 0x00);
-	REQUIRE(q[10] == 0x6d);
-	REQUIRE(q[11] == 0x68);
+	REQUIRE(q[10] == 0x96);
+	REQUIRE(q[11] == 0xbb);
 
 	// Last frame before INDEX 01:
 	// INDEX 00 with one frame remaining.
@@ -105,8 +105,8 @@ TEST_CASE("CD-ROM Q subchannel pregap", "[util][cdrom]")
 	REQUIRE(q[3] == 0x00);
 	REQUIRE(q[4] == 0x00);
 	REQUIRE(q[5] == 0x01);
-	REQUIRE(q[10] == 0x41);
-	REQUIRE(q[11] == 0x5b);
+	REQUIRE(q[10] == 0xba);
+	REQUIRE(q[11] == 0x88);
 
 	// First frame of INDEX 01:
 	// relative time resets to 00:00:00.
@@ -115,8 +115,8 @@ TEST_CASE("CD-ROM Q subchannel pregap", "[util][cdrom]")
 	REQUIRE(q[3] == 0x00);
 	REQUIRE(q[4] == 0x00);
 	REQUIRE(q[5] == 0x00);
-	REQUIRE(q[10] == 0x0b);
-	REQUIRE(q[11] == 0x5d);
+	REQUIRE(q[10] == 0xf0);
+	REQUIRE(q[11] == 0x8e);
 
 	// Last frame of INDEX 01 before INDEX 02.
 	REQUIRE(cd.get_subcode_q(374, q, true));
@@ -128,8 +128,8 @@ TEST_CASE("CD-ROM Q subchannel pregap", "[util][cdrom]")
 	REQUIRE(q[3] == 0x00);
 	REQUIRE(q[4] == 0x03);
 	REQUIRE(q[5] == 0x00);
-	REQUIRE(q[10] == 0x58);
-	REQUIRE(q[11] == 0x9b);
+	REQUIRE(q[10] == 0xa3);
+	REQUIRE(q[11] == 0x48);
 
 	std::filesystem::remove_all(tempdir);
 }
