@@ -7,6 +7,33 @@
 #include <vector>
 
 
+static uint16_t reference_q_crc(const uint8_t *data)
+{
+	uint16_t crc = 0;
+
+	for (int byte = 0; byte < 10; byte++)
+	{
+		crc ^= uint16_t(data[byte]) << 8;
+
+		for (int bit = 0; bit < 8; bit++)
+			crc = (crc & 0x8000)
+					? uint16_t((crc << 1) ^ 0x1021)
+					: uint16_t(crc << 1);
+	}
+
+	return crc ^ 0xffff;
+}
+
+
+static void require_valid_q_crc(const uint8_t *q)
+{
+	const uint16_t crc = reference_q_crc(q);
+
+	REQUIRE(q[10] == uint8_t(crc >> 8));
+	REQUIRE(q[11] == uint8_t(crc));
+}
+
+
 TEST_CASE("CD-ROM Q subchannel indexes", "[util][cdrom]")
 {
 	const std::filesystem::path tempdir =
@@ -44,6 +71,7 @@ TEST_CASE("CD-ROM Q subchannel indexes", "[util][cdrom]")
 	REQUIRE(q[7] == 0x00);
 	REQUIRE(q[8] == 0x04);
 	REQUIRE(q[9] == 0x74);
+	require_valid_q_crc(q);
 
 	// First frame of INDEX 02.
 	REQUIRE(cd.get_subcode_q(225, q));
@@ -51,6 +79,7 @@ TEST_CASE("CD-ROM Q subchannel indexes", "[util][cdrom]")
 	REQUIRE(q[7] == 0x00);
 	REQUIRE(q[8] == 0x05);
 	REQUIRE(q[9] == 0x00);
+	require_valid_q_crc(q);
 
 	// Last frame of INDEX 02.
 	REQUIRE(cd.get_subcode_q(449, q));
@@ -58,6 +87,7 @@ TEST_CASE("CD-ROM Q subchannel indexes", "[util][cdrom]")
 	REQUIRE(q[7] == 0x00);
 	REQUIRE(q[8] == 0x07);
 	REQUIRE(q[9] == 0x74);
+	require_valid_q_crc(q);
 
 	// First frame of INDEX 03.
 	REQUIRE(cd.get_subcode_q(450, q));
@@ -65,6 +95,7 @@ TEST_CASE("CD-ROM Q subchannel indexes", "[util][cdrom]")
 	REQUIRE(q[7] == 0x00);
 	REQUIRE(q[8] == 0x08);
 	REQUIRE(q[9] == 0x00);
+	require_valid_q_crc(q);
 
 	std::filesystem::remove_all(tempdir);
 }
@@ -111,6 +142,7 @@ TEST_CASE("CD-ROM Q subchannel pregap", "[util][cdrom]")
 	REQUIRE(q[7] == 0x00);
 	REQUIRE(q[8] == 0x00);
 	REQUIRE(q[9] == 0x00);
+	require_valid_q_crc(q);
 
 	// Last frame of INDEX 00.
 	REQUIRE(cd.get_subcode_q(149, q, true));
@@ -121,6 +153,7 @@ TEST_CASE("CD-ROM Q subchannel pregap", "[util][cdrom]")
 	REQUIRE(q[7] == 0x00);
 	REQUIRE(q[8] == 0x01);
 	REQUIRE(q[9] == 0x74);
+	require_valid_q_crc(q);
 
 	// INDEX 01 begins at disc LBA 0 / absolute MSF 00:02:00.
 	REQUIRE(cd.get_subcode_q(150, q, true));
@@ -131,6 +164,7 @@ TEST_CASE("CD-ROM Q subchannel pregap", "[util][cdrom]")
 	REQUIRE(q[7] == 0x00);
 	REQUIRE(q[8] == 0x02);
 	REQUIRE(q[9] == 0x00);
+	require_valid_q_crc(q);
 
 	// Last frame before INDEX 02.
 	REQUIRE(cd.get_subcode_q(374, q, true));
@@ -138,6 +172,7 @@ TEST_CASE("CD-ROM Q subchannel pregap", "[util][cdrom]")
 	REQUIRE(q[7] == 0x00);
 	REQUIRE(q[8] == 0x04);
 	REQUIRE(q[9] == 0x74);
+	require_valid_q_crc(q);
 
 	// INDEX 02 begins three seconds after INDEX 01.
 	// Relative address remains track-relative.
@@ -149,6 +184,7 @@ TEST_CASE("CD-ROM Q subchannel pregap", "[util][cdrom]")
 	REQUIRE(q[7] == 0x00);
 	REQUIRE(q[8] == 0x05);
 	REQUIRE(q[9] == 0x00);
+	require_valid_q_crc(q);
 
 	std::filesystem::remove_all(tempdir);
 }
