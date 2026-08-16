@@ -607,8 +607,8 @@ bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) c
 	const uint8_t adrcontrol = get_adr_control(tracknum);
 
 	buffer[0] = ((adrcontrol & 0x0f) << 4) | ((adrcontrol & 0xf0) >> 4);
-	buffer[1] = dec_2_bcd(tracknum + 1);
-	buffer[2] = dec_2_bcd(index);
+	buffer[1] = to_bcd(tracknum + 1);
+	buffer[2] = to_bcd(index);
 
 	buffer[3] = (relmsf >> 16) & 0xff;
 	buffer[4] = (relmsf >> 8) & 0xff;
@@ -654,6 +654,11 @@ uint32_t cdrom_file::get_track(uint32_t frame) const
 	logical_to_chd_lba(frame, track);
 
 	return track;
+}
+
+static uint8_t to_bcd(uint32_t value)
+{
+	return ((value / 10) << 4) | (value % 10);
 }
 
 uint32_t cdrom_file::get_track_index(const track_info &track, uint32_t frame)
