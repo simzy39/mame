@@ -571,6 +571,11 @@ bool cdrom_file::read_subcode(uint32_t lbasector, void *buffer, bool phys)
 	return !err;
 }
 
+static uint8_t to_bcd(uint32_t value)
+{
+	return ((value / 10) << 4) | (value % 10);
+}
+
 bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) const
 {
 	uint32_t tracknum = 0;
@@ -654,11 +659,6 @@ uint32_t cdrom_file::get_track(uint32_t frame) const
 	logical_to_chd_lba(frame, track);
 
 	return track;
-}
-
-static uint8_t to_bcd(uint32_t value)
-{
-	return ((value / 10) << 4) | (value % 10);
 }
 
 uint32_t cdrom_file::get_track_index(const track_info &track, uint32_t frame)
