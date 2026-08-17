@@ -563,11 +563,25 @@ bool cdrom_file::read_subcode(uint32_t lbasector, void *buffer, bool phys)
 		chdsector = logical_to_chd_lba(lbasector, tracknum);
 	}
 
-	if (cdtoc.tracks[tracknum].subsize == 0)
+		if (cdtoc.tracks[tracknum].subsize == 0)
 		return false;
 
-	// read the data
-	std::error_condition err = read_partial_sector(buffer, lbasector, chdsector, tracknum, cdtoc.tracks[tracknum].datasize, cdtoc.tracks[tracknum].subsize, phys);
+	// Source images store subcode immediately after the track data, while
+	// CHD CD frames always reserve the first 2352 bytes for sector data
+	// and the final 96 bytes for subcode.
+	const uint32_t subcode_offset =
+			chd
+				? MAX_SECTOR_DATA
+				: cdtoc.tracks[tracknum].datasize;
+
+	std::error_condition err = read_partial_sector(
+			buffer,
+			lbasector,
+			chdsector,
+			tracknum,
+			subcode_offset,
+			cdtoc.tracks[tracknum].subsize,
+			phys);
 	return !err;
 }
 
