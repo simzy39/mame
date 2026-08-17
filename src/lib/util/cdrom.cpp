@@ -1135,52 +1135,6 @@ std::error_condition cdrom_file::parse_metadata(chd_file *chd, toc &toc)
 	if (toc.numsessions > 1)
 		toc.flags |= CD_FLAG_MULTISESSION;
 
-	if (toc.numtrks > 0)
-	{
-		for (uint32_t metaindex = 0; ; metaindex++)
-		{
-			err = chd->read_metadata(CDROM_TRACK_INDEX_METADATA_TAG, metaindex, metadata);
-			if (err == chd_file::error::METADATA_NOT_FOUND)
-				break;
-			if (err)
-				return err;
-
-			int tracknum, index, frame;
-			if (sscanf(metadata.c_str(), CDROM_TRACK_INDEX_METADATA_FORMAT, &tracknum, &index, &frame) != 3)
-				return chd_file::error::INVALID_DATA;
-
-			if ((tracknum < 1) || (tracknum > toc.numtrks) ||
-					(index < 2) || (index > MAX_INDEX) ||
-					(frame < 0))
-				return chd_file::error::INVALID_DATA;
-
-			track_info &track = toc.tracks[tracknum - 1];
-
-			if (track.idx[index] != -1)
-				return chd_file::error::INVALID_DATA;
-
-			track.idx[index] = frame;
-		}
-
-		// validate that indexes occur in ascending frame order
-		for (int tracknum = 0; tracknum < toc.numtrks; tracknum++)
-		{
-			const track_info &track = toc.tracks[tracknum];
-			int32_t previous = 0;
-
-			for (int index = 2; index <= MAX_INDEX; index++)
-			{
-				if (track.idx[index] == -1)
-					continue;
-
-				if (track.idx[index] <= previous)
-					return chd_file::error::INVALID_DATA;
-
-				previous = track.idx[index];
-			}
-		}
-	}
-
 	/* if we got any tracks this way, we're done */
 	if (toc.numtrks > 0)
 		return std::error_condition();
@@ -1303,26 +1257,10 @@ std::error_condition cdrom_file::write_metadata(chd_file *chd, const toc &toc)
 		}
 		if (err)
 			return err;
-
-		for (int index = 2; index <= MAX_INDEX; index++)
-		{
-			if (toc.tracks[i].idx[index] == -1)
-				continue;
-
-			metadata = util::string_format(
-					CDROM_TRACK_INDEX_METADATA_FORMAT,
-					i + 1,
-					index,
-					toc.tracks[i].idx[index]);
-
-			err = chd->write_metadata(CDROM_TRACK_INDEX_METADATA_TAG, CHDMETAINDEX_APPEND, metadata);
-			if (err)
-				return err;
-		}
 	}
+
 	return std::error_condition();
 }
-
 /**
  * @brief   -------------------------------------------------
  *            ECC lookup tables pre-calculated tables for ECC data calcs
