@@ -165,6 +165,12 @@ public:
 
 	static void encode_subcode_q(const q_position &position, uint8_t *buffer);
 	static void pack_subcode_q(const uint8_t *q, uint8_t *subcode);
+	static bool make_subcode_q_position(
+			const toc &toc,
+			uint32_t tracknum,
+			int64_t track_frame,
+			int64_t absolute_frame,
+			q_position &position);
 
 	/* handy utilities */
 	uint32_t get_track(uint32_t frame) const;
