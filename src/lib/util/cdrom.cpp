@@ -630,8 +630,8 @@ void cdrom_file::encode_subcode_q(const q_position &position, uint8_t *q)
 	const uint32_t relmsf = cdrom_file::lba_to_msf(position.relative_frame);
 	const uint32_t absmsf = cdrom_file::lba_to_msf(position.absolute_frame);
 
-	// MAME stores ADR in the low nibble and CONTROL in the high nibble.
-	// Q transmits CONTROL first, followed by ADR.
+	// MAME stores ADR in the high nibble and CONTROL in the low nibble.
+	// Q stores CONTROL in the high nibble and ADR in the low nibble.
 	q[0] = ((position.adr_control & 0x0f) << 4) | ((position.adr_control & 0xf0) >> 4);
 	q[1] = to_bcd(position.track);
 	q[2] = to_bcd(position.index);
@@ -651,6 +651,43 @@ void cdrom_file::encode_subcode_q(const q_position &position, uint8_t *q)
 	q[11] = crc;
 }
 
+bool cdrom_file::make_subcode_q_position(
+		const toc &toc,
+		uint32_t tracknum,
+		int64_t track_frame,
+		int64_t absolute_frame,
+		q_position &position)
+{
+	if (tracknum >= toc.numtrks || absolute_frame < 0)
+		return false;
+
+	const track_info &track = toc.tracks[tracknum];
+
+	uint8_t adr_control =
+			(CD_FLAG_ADR_START_TIME << 4)
+				| (track.control_flags & 0x0f);
+
+	if (track.trktype != CD_TRACK_AUDIO)
+		adr_control |= CD_FLAG_CONTROL_DATA_TRACK;
+
+	position.adr_control = adr_control;
+	position.track = tracknum + 1;
+
+	if (track_frame < 0)
+	{
+		position.index = 0;
+		position.relative_frame = uint32_t(-track_frame);
+	}
+	else
+	{
+		position.relative_frame = uint32_t(track_frame);
+		position.index = get_track_index(track, position.relative_frame);
+	}
+
+	position.absolute_frame = uint32_t(absolute_frame);
+
+	return true;
+}
 
 bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) const
 {
@@ -683,49 +720,40 @@ bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) c
 	if (track.subsize != 0)
 		return false;
 
-	uint32_t track_start;
-	if (phys)
-		track_start = track.physframeofs + track.pregap;
-	else
-		track_start = track.logframeofs;
+	const uint32_t track_start =
+			phys
+				? track.physframeofs + track.pregap
+				: track.logframeofs;
 
-	q_position position;
-	position.adr_control = get_adr_control(tracknum);
-	position.track = tracknum + 1;
+	// Signed position relative to INDEX 01.  Negative values are INDEX 00.
+	const int64_t track_frame =
+			int64_t(lbasector) - int64_t(track_start);
 
-	if (lbasector < track_start)
-	{
-		position.index = 0;
-		position.relative_frame = track_start - lbasector;
-	}
-	else
-	{
-		position.relative_frame = lbasector - track_start;
-		position.index = get_track_index(track, position.relative_frame);
-	}
-
-	// Convert physical addressing to the corresponding logical disc
-	// position before deriving Q absolute time.
+	// Normalize physical addressing onto the logical disc timeline.
 	int64_t logical_frame = lbasector;
 
 	if (phys)
 	{
 		logical_frame =
 				int64_t(track.logframeofs)
-					+ int64_t(lbasector)
-					- int64_t(track_start);
+					+ track_frame;
 	}
 
 	// Track 1 INDEX 01 corresponds to absolute 00:02:00.
 	const int64_t absolute_frame =
 			logical_frame + 150 - int64_t(cdtoc.tracks[0].logframeofs);
 
-	// A descriptor asking us to synthesize program-area Q before
-	// absolute 00:00:00 cannot be represented by ADR=1 position data.
-	if (absolute_frame < 0)
-		return false;
+	q_position position;
 
-	position.absolute_frame = uint32_t(absolute_frame);
+	if (!make_subcode_q_position(
+			cdtoc,
+			tracknum,
+			track_frame,
+			absolute_frame,
+			position))
+	{
+		return false;
+	}
 
 	encode_subcode_q(position, buffer);
 	return true;
