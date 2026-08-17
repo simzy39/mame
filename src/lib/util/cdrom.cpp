@@ -576,17 +576,6 @@ static uint8_t to_bcd(uint32_t value)
 	return ((value / 10) << 4) | (value % 10);
 }
 
-
-struct q_position
-{
-	uint8_t adr_control;
-	uint8_t track;
-	uint8_t index;
-	uint32_t relative_frame;
-	uint32_t absolute_frame;
-};
-
-
 static void unpack_q_raw(const uint8_t *subcode, uint8_t *q)
 {
 	for (int byte = 0; byte < 12; byte++)
@@ -606,7 +595,7 @@ static void unpack_q_raw(const uint8_t *subcode, uint8_t *q)
 }
 
 
-static void pack_q_raw(const uint8_t *q, uint8_t *subcode)
+void cdrom_file::pack_subcode_q(const uint8_t *q, uint8_t *subcode)
 {
 	memset(subcode, 0, 96);
 
@@ -636,7 +625,7 @@ static uint16_t calculate_q_crc(const uint8_t *data)
 }
 
 
-static void encode_q_position(const q_position &position, uint8_t *q)
+void cdrom_file::encode_subcode_q(const q_position &position, uint8_t *q)
 {
 	const uint32_t relmsf = cdrom_file::lba_to_msf(position.relative_frame);
 	const uint32_t absmsf = cdrom_file::lba_to_msf(position.absolute_frame);
@@ -738,7 +727,7 @@ bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) c
 
 	position.absolute_frame = uint32_t(absolute_frame);
 
-	encode_q_position(position, buffer);
+	encode_subcode_q(position, buffer);
 	return true;
 }
 
@@ -772,7 +761,7 @@ bool cdrom_file::get_subcode_raw(uint32_t lbasector, uint8_t *buffer, bool phys)
 	if (!get_subcode_q(lbasector, q, phys))
 		return false;
 
-	pack_q_raw(q, buffer);
+	pack_subcode_q(q, buffer);
 	return true;
 }
 
