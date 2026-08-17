@@ -714,9 +714,14 @@ bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) c
 
 	const track_info &track = cdtoc.tracks[tracknum];
 
+		const bool virtual_pregap =
+			!phys
+				&& (track.pgdatasize == 0)
+				&& (lbasector < track.logframeofs);
+
 	// Captured subcode is authoritative.  Return captured Q without
 	// validating or replacing it.
-	if (track.subsize == 96)
+		if (!virtual_pregap && track.subsize == 96)
 	{
 		uint8_t subcode[96];
 
@@ -731,7 +736,7 @@ bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) c
 	}
 
 	// Never synthesize Q over captured subcode that we cannot decode.
-	if (track.subsize != 0)
+		if (!virtual_pregap && track.subsize != 0)
 		return false;
 
 	const uint32_t track_start =
@@ -783,9 +788,14 @@ bool cdrom_file::get_subcode_raw(uint32_t lbasector, uint8_t *buffer, bool phys)
 		logical_to_chd_lba(lbasector, tracknum);
 
 	const track_info &track = cdtoc.tracks[tracknum];
-
+	
+	const bool virtual_pregap =
+			!phys
+				&& (track.pgdatasize == 0)
+				&& (lbasector < track.logframeofs);
+	
 	// Preserve captured raw P-W subcode exactly as stored.
-	if (track.subsize == 96)
+		if (!virtual_pregap && track.subsize == 96)
 	{
 		if (track.subtype == CD_SUB_RAW)
 			return const_cast<cdrom_file *>(this)->read_subcode(lbasector, buffer, phys);
@@ -795,7 +805,7 @@ bool cdrom_file::get_subcode_raw(uint32_t lbasector, uint8_t *buffer, bool phys)
 		return false;
 	}
 
-	if (track.subsize != 0)
+		if (!virtual_pregap && track.subsize != 0)
 		return false;
 
 	uint8_t q[12];
