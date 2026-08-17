@@ -143,6 +143,14 @@ public:
 		track_input_entry track[MAX_TRACKS];
 	};
 
+	struct q_position
+	{
+		uint8_t adr_control;
+		uint8_t track;
+		uint8_t index;
+		uint32_t relative_frame;
+		uint32_t absolute_frame;
+	};
 
 	cdrom_file(chd_file *chd);
 	cdrom_file(std::string_view inputfile);
@@ -154,6 +162,9 @@ public:
 	bool read_subcode(uint32_t lbasector, void *buffer, bool phys=false);
 	bool get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys=false) const;
 	bool get_subcode_raw(uint32_t lbasector, uint8_t *buffer, bool phys=false) const;
+
+	static void encode_subcode_q(const q_position &position, uint8_t *buffer);
+	static void pack_subcode_q(const uint8_t *q, uint8_t *subcode);
 
 	/* handy utilities */
 	uint32_t get_track(uint32_t frame) const;
