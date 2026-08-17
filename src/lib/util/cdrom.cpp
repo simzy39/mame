@@ -576,7 +576,18 @@ static uint8_t to_bcd(uint32_t value)
 	return ((value / 10) << 4) | (value % 10);
 }
 
-static void extract_q_raw(const uint8_t *subcode, uint8_t *q)
+
+struct q_position
+{
+	uint8_t adr_control;
+	uint8_t track;
+	uint8_t index;
+	uint32_t relative_frame;
+	uint32_t absolute_frame;
+};
+
+
+static void unpack_q_raw(const uint8_t *subcode, uint8_t *q)
 {
 	for (int byte = 0; byte < 12; byte++)
 	{
@@ -594,6 +605,64 @@ static void extract_q_raw(const uint8_t *subcode, uint8_t *q)
 	}
 }
 
+
+static void pack_q_raw(const uint8_t *q, uint8_t *subcode)
+{
+	memset(subcode, 0, 96);
+
+	for (int byte = 0; byte < 12; byte++)
+	{
+		for (int bit = 0; bit < 8; bit++)
+		{
+			if (q[byte] & (0x80 >> bit))
+				subcode[(byte * 8) + bit] |= 0x40;
+		}
+	}
+}
+
+static uint16_t calculate_q_crc(const uint8_t *data)
+{
+	uint16_t crc = 0;
+
+	for (int byte = 0; byte < 10; byte++)
+	{
+		crc ^= uint16_t(data[byte]) << 8;
+
+		for (int bit = 0; bit < 8; bit++)
+			crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) : (crc << 1);
+	}
+
+	return ~crc;
+}
+
+
+static void encode_q_position(const q_position &position, uint8_t *q)
+{
+	const uint32_t relmsf = cdrom_file::lba_to_msf(position.relative_frame);
+	const uint32_t absmsf = cdrom_file::lba_to_msf(position.absolute_frame);
+
+	// MAME stores ADR in the low nibble and CONTROL in the high nibble.
+	// Q transmits CONTROL first, followed by ADR.
+	q[0] = ((position.adr_control & 0x0f) << 4) | ((position.adr_control & 0xf0) >> 4);
+	q[1] = to_bcd(position.track);
+	q[2] = to_bcd(position.index);
+
+	q[3] = (relmsf >> 16) & 0xff;
+	q[4] = (relmsf >> 8) & 0xff;
+	q[5] = relmsf & 0xff;
+
+	q[6] = 0;
+
+	q[7] = (absmsf >> 16) & 0xff;
+	q[8] = (absmsf >> 8) & 0xff;
+	q[9] = absmsf & 0xff;
+
+	const uint16_t crc = calculate_q_crc(q);
+	q[10] = crc >> 8;
+	q[11] = crc;
+}
+
+
 bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) const
 {
 	uint32_t tracknum = 0;
@@ -605,69 +674,105 @@ bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) c
 
 	const track_info &track = cdtoc.tracks[tracknum];
 
-	if ((track.subtype == CD_SUB_RAW) && (track.subsize == 96))
+	// Captured subcode is authoritative.  Return captured Q without
+	// validating or replacing it.
+	if (track.subsize == 96)
 	{
 		uint8_t subcode[96];
 
 		if (const_cast<cdrom_file *>(this)->read_subcode(lbasector, subcode, phys))
 		{
-			extract_q_raw(subcode, buffer);
-
-			const uint16_t stored_crc =
-					(uint16_t(buffer[10]) << 8) | buffer[11];
-
-			if (subcode_q_crc(buffer) == stored_crc)
+			if (track.subtype == CD_SUB_RAW)
+			{
+				unpack_q_raw(subcode, buffer);
 				return true;
+			}
 		}
 	}
-	
+
+	// Never synthesize Q over captured subcode that we cannot decode.
+	if (track.subsize != 0)
+		return false;
+
 	uint32_t track_start;
 	if (phys)
 		track_start = track.physframeofs + track.pregap;
 	else
 		track_start = track.logframeofs;
 
-	uint32_t index;
-	uint32_t relframe;
+	q_position position;
+	position.adr_control = get_adr_control(tracknum);
+	position.track = tracknum + 1;
 
 	if (lbasector < track_start)
 	{
-		index = 0;
-		relframe = track_start - lbasector;
+		position.index = 0;
+		position.relative_frame = track_start - lbasector;
 	}
 	else
 	{
-		relframe = lbasector - track_start;
-		index = get_track_index(track, relframe);
+		position.relative_frame = lbasector - track_start;
+		position.index = get_track_index(track, position.relative_frame);
 	}
 
-	const uint32_t relmsf = lba_to_msf(relframe);
-	const uint32_t absolute_frame =
-		phys
-				? lbasector + 150 - cdtoc.tracks[0].pregap
-				: lbasector + 150;
+	// Convert physical addressing to the corresponding logical disc
+	// position before deriving Q absolute time.
+	int64_t logical_frame = lbasector;
 
-	const uint32_t absmsf = lba_to_msf(absolute_frame);
-	const uint8_t adrcontrol = get_adr_control(tracknum);
+	if (phys)
+	{
+		logical_frame =
+				int64_t(track.logframeofs)
+					+ int64_t(lbasector)
+					- int64_t(track_start);
+	}
 
-	buffer[0] = ((adrcontrol & 0x0f) << 4) | ((adrcontrol & 0xf0) >> 4);
-	buffer[1] = to_bcd(tracknum + 1);
-	buffer[2] = to_bcd(index);
+	// Track 1 INDEX 01 corresponds to absolute 00:02:00.
+	const int64_t absolute_frame =
+			logical_frame + 150 - int64_t(cdtoc.tracks[0].logframeofs);
 
-	buffer[3] = (relmsf >> 16) & 0xff;
-	buffer[4] = (relmsf >> 8) & 0xff;
-	buffer[5] = relmsf & 0xff;
+	// A descriptor asking us to synthesize program-area Q before
+	// absolute 00:00:00 cannot be represented by ADR=1 position data.
+	if (absolute_frame < 0)
+		return false;
 
-	buffer[6] = 0;
+	position.absolute_frame = uint32_t(absolute_frame);
 
-	buffer[7] = (absmsf >> 16) & 0xff;
-	buffer[8] = (absmsf >> 8) & 0xff;
-	buffer[9] = absmsf & 0xff;
+	encode_q_position(position, buffer);
+	return true;
+}
 
-	const uint16_t crc = subcode_q_crc(buffer);
-	buffer[10] = crc >> 8;
-	buffer[11] = crc;
+bool cdrom_file::get_subcode_raw(uint32_t lbasector, uint8_t *buffer, bool phys) const
+{
+	uint32_t tracknum = 0;
 
+	if (phys)
+		physical_to_chd_lba(lbasector, tracknum);
+	else
+		logical_to_chd_lba(lbasector, tracknum);
+
+	const track_info &track = cdtoc.tracks[tracknum];
+
+	// Preserve captured raw P-W subcode exactly as stored.
+	if (track.subsize == 96)
+	{
+		if (track.subtype == CD_SUB_RAW)
+			return const_cast<cdrom_file *>(this)->read_subcode(lbasector, buffer, phys);
+
+		// Never replace captured subcode in another representation
+		// with synthesized data.
+		return false;
+	}
+
+	if (track.subsize != 0)
+		return false;
+
+	uint8_t q[12];
+
+	if (!get_subcode_q(lbasector, q, phys))
+		return false;
+
+	pack_q_raw(q, buffer);
 	return true;
 }
 
@@ -720,17 +825,7 @@ uint32_t cdrom_file::get_track_index(const track_info &track, uint32_t frame)
 
 uint16_t cdrom_file::subcode_q_crc(const uint8_t *data)
 {
-	uint16_t crc = 0;
-
-	for (int byte = 0; byte < 10; byte++)
-	{
-		crc ^= uint16_t(data[byte]) << 8;
-
-		for (int bit = 0; bit < 8; bit++)
-			crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) : (crc << 1);
-	}
-
-	return ~crc;
+	return calculate_q_crc(data);
 }
 
 uint32_t cdrom_file::get_track_index(uint32_t frame) const
@@ -740,7 +835,6 @@ uint32_t cdrom_file::get_track_index(uint32_t frame) const
 
 	return get_track_index(cdtoc.tracks[track], frame - track_start);
 }
-
 
 /***************************************************************************
     EXTRA UTILITIES
