@@ -952,9 +952,29 @@ uint16_t cdrom_file::subcode_q_crc(const uint8_t *data)
 uint32_t cdrom_file::get_track_index(uint32_t frame) const
 {
 	const uint32_t track = get_track(frame);
-	const uint32_t track_start = get_track_start(track);
+	const track_info &trackinfo = cdtoc.tracks[track];
 
-	return get_track_index(cdtoc.tracks[track], frame - track_start);
+	// When position Q is stored with the image, it is authoritative for
+	// the index at this sector.  This avoids requiring INDEX 02+ to be
+	// duplicated in CHD metadata.
+	if (trackinfo.subsize == MAX_SUBCODE_DATA
+			&& trackinfo.subtype == CD_SUB_RAW)
+	{
+		uint8_t q[12];
+		q_position position;
+
+		if (get_subcode_q(frame, q)
+				&& decode_subcode_q(q, position)
+				&& position.track == track + 1)
+		{
+			return position.index;
+		}
+	}
+
+	// Descriptor-backed images, and CHDs without usable position Q,
+	// fall back to the semantic index table.
+	const uint32_t track_start = get_track_start(track);
+	return get_track_index(trackinfo, frame - track_start);
 }
 
 /***************************************************************************
