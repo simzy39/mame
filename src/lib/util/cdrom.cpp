@@ -999,6 +999,9 @@ void cdrom_file::reconstruct_track_indexes()
 		int pending_index = -1;
 		uint32_t pending_frame = 0;
 
+		const uint32_t index01_frame =
+		(track.pgdatasize != 0) ? track.pregap : 0;
+
 		for (uint32_t frame = 0; frame < track.frames; frame++)
 		{
 			const uint32_t physframe = track.physframeofs + frame;
@@ -1040,9 +1043,9 @@ if (position.index == previous_index)
 if (pending_index == position.index)
 {
 	if (track.idx[position.index] == -1
-			&& pending_frame >= track.pregap)
+		&& pending_frame >= index01_frame)
 	{
-		track.idx[position.index] = pending_frame - track.pregap;
+		track.idx[position.index] = pending_frame - index01_frame;
 	}
 
 	previous_index = position.index;
