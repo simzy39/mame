@@ -353,6 +353,93 @@ TEST_CASE("CD-ROM Q subchannel later-track virtual pregap", "[util][cdrom]")
 	std::filesystem::remove_all(tempdir);
 }
 
+TEST_CASE("CD-ROM raw subcode later-track virtual pregap", "[util][cdrom]")
+{
+	const std::filesystem::path tempdir =
+			std::filesystem::temp_directory_path() / "mame-cdrom-raw-later-virtual-pregap-test";
+	const std::filesystem::path track1path = tempdir / "track1.bin";
+	const std::filesystem::path track2path = tempdir / "track2.bin";
+	const std::filesystem::path tocpath = tempdir / "later-virtual-raw.toc";
+
+	std::filesystem::remove_all(tempdir);
+	std::filesystem::create_directories(tempdir);
+
+	// Give track 1 captured RW_RAW subcode.  Make the Q data distinctive so
+	// it cannot be confused with synthesized Q for track 2's virtual pregap.
+	uint8_t stored_q[12] =
+	{
+		0x01,
+		0x01,
+		0x07,
+		0x00, 0x00, 0x00,
+		0x00,
+		0x00, 0x02, 0x00,
+		0x00, 0x00
+	};
+
+	const uint16_t crc = reference_q_crc(stored_q);
+	stored_q[10] = uint8_t(crc >> 8);
+	stored_q[11] = uint8_t(crc);
+
+	uint8_t raw_subcode[96];
+	interleave_q_raw(stored_q, raw_subcode);
+
+	{
+		std::ofstream bin(track1path, std::ios::binary);
+		const std::vector<char> audio(2352, 0);
+
+		// Track 1 is three seconds long.
+		for (int frame = 0; frame < 3 * 75; frame++)
+		{
+			bin.write(audio.data(), audio.size());
+			bin.write(
+					reinterpret_cast<const char *>(raw_subcode),
+					sizeof(raw_subcode));
+		}
+	}
+
+	{
+		std::ofstream bin(track2path, std::ios::binary);
+		const std::vector<char> data(4 * 75 * 2352, 0);
+		bin.write(data.data(), data.size());
+	}
+
+	{
+		std::ofstream toc(tocpath);
+		toc <<
+				"CD_DA\n"
+				"\n"
+				"TRACK AUDIO RW_RAW\n"
+				"DATAFILE \"track1.bin\" 00:03:00\n"
+				"\n"
+				"TRACK AUDIO\n"
+				"START 00:02:00\n"
+				"DATAFILE \"track2.bin\" 00:00:00 00:04:00\n";
+	}
+
+	cdrom_file cd(tocpath.string());
+
+	uint8_t subcode[96];
+	uint8_t q[12];
+
+	// Logical frame 225 is already track 2's virtual INDEX 00 pregap.
+	REQUIRE(cd.get_subcode_raw(225, subcode));
+
+	cdrom_file::unpack_subcode_q(subcode, q);
+
+	REQUIRE(q[1] == 0x02);
+	REQUIRE(q[2] == 0x00);
+	REQUIRE(q[3] == 0x00);
+	REQUIRE(q[4] == 0x02);
+	REQUIRE(q[5] == 0x00);
+	REQUIRE(q[7] == 0x00);
+	REQUIRE(q[8] == 0x05);
+	REQUIRE(q[9] == 0x00);
+	require_valid_q_crc(q);
+
+	std::filesystem::remove_all(tempdir);
+}
+
 TEST_CASE("CD-ROM Q subchannel encode decode round trip", "[util][cdrom]")
 {
 	cdrom_file::q_position input;
