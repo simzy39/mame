@@ -194,6 +194,86 @@ TEST_CASE("CD-ROM Q subchannel pregap", "[util][cdrom]")
 	std::filesystem::remove_all(tempdir);
 }
 
+TEST_CASE("CD-ROM Q subchannel virtual pregap", "[util][cdrom]")
+{
+	const std::filesystem::path tempdir =
+			std::filesystem::temp_directory_path() / "mame-cdrom-q-virtual-pregap-test";
+	const std::filesystem::path binpath = tempdir / "virtual.bin";
+	const std::filesystem::path tocpath = tempdir / "virtual.toc";
+
+	std::filesystem::remove_all(tempdir);
+	std::filesystem::create_directories(tempdir);
+
+	// The pregap is virtual: it is described by the TOC but is not present
+	// in the source data.
+	{
+		std::ofstream bin(binpath, std::ios::binary);
+		const std::vector<char> data(6 * 75 * 2352, 0);
+		bin.write(data.data(), data.size());
+	}
+
+	{
+		std::ofstream toc(tocpath);
+		toc <<
+				"CD_DA\n"
+				"\n"
+				"TRACK AUDIO\n"
+				"PREGAP 00:02:00\n"
+				"DATAFILE \"virtual.bin\" 00:06:00\n";
+	}
+
+	cdrom_file cd(tocpath.string());
+
+	uint8_t q[12];
+
+	// Logical access to the virtual pregap synthesizes INDEX 00.
+	REQUIRE(cd.get_subcode_q(0, q));
+	REQUIRE(q[2] == 0x00);
+	REQUIRE(q[3] == 0x00);
+	REQUIRE(q[4] == 0x02);
+	REQUIRE(q[5] == 0x00);
+	REQUIRE(q[7] == 0x00);
+	REQUIRE(q[8] == 0x00);
+	REQUIRE(q[9] == 0x00);
+	require_valid_q_crc(q);
+
+	// Last virtual pregap frame.
+	REQUIRE(cd.get_subcode_q(149, q));
+	REQUIRE(q[2] == 0x00);
+	REQUIRE(q[3] == 0x00);
+	REQUIRE(q[4] == 0x00);
+	REQUIRE(q[5] == 0x01);
+	REQUIRE(q[7] == 0x00);
+	REQUIRE(q[8] == 0x01);
+	REQUIRE(q[9] == 0x74);
+	require_valid_q_crc(q);
+
+	// Logical INDEX 01.
+	REQUIRE(cd.get_subcode_q(150, q));
+	REQUIRE(q[2] == 0x01);
+	REQUIRE(q[3] == 0x00);
+	REQUIRE(q[4] == 0x00);
+	REQUIRE(q[5] == 0x00);
+	REQUIRE(q[7] == 0x00);
+	REQUIRE(q[8] == 0x02);
+	REQUIRE(q[9] == 0x00);
+	require_valid_q_crc(q);
+
+	// Physical sector zero is already INDEX 01 because the pregap is not
+	// actually stored in the source image.
+	REQUIRE(cd.get_subcode_q(0, q, true));
+	REQUIRE(q[2] == 0x01);
+	REQUIRE(q[3] == 0x00);
+	REQUIRE(q[4] == 0x00);
+	REQUIRE(q[5] == 0x00);
+	REQUIRE(q[7] == 0x00);
+	REQUIRE(q[8] == 0x02);
+	REQUIRE(q[9] == 0x00);
+	require_valid_q_crc(q);
+
+	std::filesystem::remove_all(tempdir);
+}
+
 TEST_CASE("CD-ROM Q subchannel stored RW_RAW", "[util][cdrom]")
 {
 	const std::filesystem::path tempdir =
