@@ -2817,6 +2817,11 @@ static void do_extract_cd(parameters_map &params)
 
 	// further process input file
 	cdrom_file *cdrom = new cdrom_file(&input_chd);
+
+	// CHD metadata does not carry INDEX 02+ positions.  Recover them
+	// on demand from valid stored Q before writing a descriptor.
+	cdrom->reconstruct_track_indexes();
+
 	const cdrom_file::toc &toc = cdrom->get_toc();
 
 	// verify output file doesn't exist
