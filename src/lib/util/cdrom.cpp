@@ -820,9 +820,10 @@ bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) c
 		return false;
 
 	const uint32_t track_start =
-			phys
-				? track.physframeofs + track.pregap
-				: track.logframeofs;
+		phys
+			? track.physframeofs
+				+ ((track.pgdatasize != 0) ? track.pregap : 0)
+			: track.logframeofs;
 
 	// Signed position relative to INDEX 01.  Negative values are INDEX 00.
 	const int64_t track_frame =
