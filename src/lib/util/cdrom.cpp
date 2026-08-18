@@ -590,6 +590,18 @@ static uint8_t to_bcd(uint32_t value)
 	return ((value / 10) << 4) | (value % 10);
 }
 
+static bool from_bcd(uint8_t value, uint8_t &result)
+{
+	const uint8_t tens = value >> 4;
+	const uint8_t ones = value & 0x0f;
+
+	if (tens > 9 || ones > 9)
+		return false;
+
+	result = tens * 10 + ones;
+	return true;
+}
+
 void cdrom_file::unpack_subcode_q(const uint8_t *subcode, uint8_t *q)
 {
 	for (int byte = 0; byte < 12; byte++)
@@ -663,6 +675,74 @@ void cdrom_file::encode_subcode_q(const q_position &position, uint8_t *q)
 	const uint16_t crc = calculate_q_crc(q);
 	q[10] = crc >> 8;
 	q[11] = crc;
+}
+
+bool cdrom_file::decode_subcode_q(const uint8_t *q, q_position &position)
+{
+	// Only ADR=1 carries track/index position information.
+	if ((q[0] & 0x0f) != CD_FLAG_ADR_START_TIME)
+		return false;
+
+	// Reject Q frames with an invalid CRC.
+	const uint16_t crc = calculate_q_crc(q);
+	if (q[10] != (crc >> 8) || q[11] != (crc & 0xff))
+		return false;
+
+	// ADR=1 position Q reserves this byte as zero.
+	if (q[6] != 0)
+		return false;
+
+	uint8_t track;
+	uint8_t index;
+	uint8_t rel_minute;
+	uint8_t rel_second;
+	uint8_t rel_frame;
+	uint8_t abs_minute;
+	uint8_t abs_second;
+	uint8_t abs_frame;
+
+	if (!from_bcd(q[1], track)
+			|| !from_bcd(q[2], index)
+			|| !from_bcd(q[3], rel_minute)
+			|| !from_bcd(q[4], rel_second)
+			|| !from_bcd(q[5], rel_frame)
+			|| !from_bcd(q[7], abs_minute)
+			|| !from_bcd(q[8], abs_second)
+			|| !from_bcd(q[9], abs_frame))
+	{
+		return false;
+	}
+
+	if (track == 0
+			|| track > MAX_TRACKS
+			|| index > MAX_INDEX
+			|| rel_second >= 60
+			|| abs_second >= 60
+			|| rel_frame >= 75
+			|| abs_frame >= 75)
+	{
+		return false;
+	}
+
+	// Convert the Q CONTROL/ADR byte back to MAME's ADR/CONTROL layout.
+	position.adr_control =
+			((q[0] & 0x0f) << 4)
+				| ((q[0] & 0xf0) >> 4);
+
+	position.track = track;
+	position.index = index;
+
+	position.relative_frame =
+			uint32_t(rel_minute) * 60 * 75
+				+ uint32_t(rel_second) * 75
+				+ rel_frame;
+
+	position.absolute_frame =
+			uint32_t(abs_minute) * 60 * 75
+				+ uint32_t(abs_second) * 75
+				+ abs_frame;
+
+	return true;
 }
 
 bool cdrom_file::make_subcode_q_position(
