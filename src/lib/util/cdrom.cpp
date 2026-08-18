@@ -882,12 +882,31 @@ bool cdrom_file::get_subcode_raw(uint32_t lbasector, uint8_t *buffer, bool phys)
 {
 	uint32_t tracknum = 0;
 
-	if (phys)
-		physical_to_chd_lba(lbasector, tracknum);
-	else
-		logical_to_chd_lba(lbasector, tracknum);
+if (phys)
+{
+	physical_to_chd_lba(lbasector, tracknum);
+}
+else
+{
+	logical_to_chd_lba(lbasector, tracknum);
 
-	const track_info &track = cdtoc.tracks[tracknum];
+	// A virtual pregap belongs to the upcoming track even though INDEX 01
+	// has not been reached yet.
+	if (tracknum + 1 < cdtoc.numtrks)
+	{
+		const track_info &next_track = cdtoc.tracks[tracknum + 1];
+
+		if (next_track.pgdatasize == 0
+				&& next_track.pregap != 0
+				&& lbasector >= next_track.logframeofs - next_track.pregap
+				&& lbasector < next_track.logframeofs)
+		{
+			tracknum++;
+		}
+	}
+}
+
+const track_info &track = cdtoc.tracks[tracknum];
 	
 	const bool virtual_pregap =
 			!phys
