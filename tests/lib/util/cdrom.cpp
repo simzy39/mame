@@ -314,23 +314,6 @@ TEST_CASE("CD-ROM Q subchannel later-track virtual pregap", "[util][cdrom]")
 
 	uint8_t q[12];
 
-	const cdrom_file::toc &parsed_toc = cd.get_toc();
-
-	INFO("track 1 logframeofs = " << parsed_toc.tracks[0].logframeofs);
-	INFO("track 1 frames = " << parsed_toc.tracks[0].frames);
-	INFO("track 2 logframeofs = " << parsed_toc.tracks[1].logframeofs);
-	INFO("track 2 pregap = " << parsed_toc.tracks[1].pregap);
-	INFO("track 2 pgdatasize = " << parsed_toc.tracks[1].pgdatasize);
-	INFO("track 2 frames = " << parsed_toc.tracks[1].frames);
-	INFO("track 2 logframes = " << parsed_toc.tracks[1].logframes);
-	INFO("dummy logframeofs = " << parsed_toc.tracks[2].logframeofs);
-
-	INFO("get_track(224) = " << cd.get_track(224));
-	INFO("get_track(225) = " << cd.get_track(225));
-	INFO("get_track(374) = " << cd.get_track(374));
-	INFO("get_track(375) = " << cd.get_track(375));
-	INFO("get_track(376) = " << cd.get_track(376));
-
 	// Track 2's virtual pregap begins immediately after track 1.
 	REQUIRE(cd.get_subcode_q(225, q));
 	REQUIRE(q[1] == 0x02);
