@@ -3,7 +3,6 @@
 #include "cdrom.h"
 #include "chd.h"
 
-#include <array>
 #include <filesystem>
 #include <vector>
 
