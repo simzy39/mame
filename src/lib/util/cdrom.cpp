@@ -990,7 +990,23 @@ uint16_t cdrom_file::subcode_q_crc(const uint8_t *data)
 
 uint32_t cdrom_file::get_track_index(uint32_t frame) const
 {
-	const uint32_t track = get_track(frame);
+	uint32_t track = 0;
+	logical_to_chd_lba(frame, track);
+
+	// A virtual pregap belongs to the upcoming track and is INDEX 00.
+	if (track + 1 < cdtoc.numtrks)
+	{
+		const track_info &next_track = cdtoc.tracks[track + 1];
+
+		if (next_track.pgdatasize == 0
+				&& next_track.pregap != 0
+				&& frame >= next_track.logframeofs - next_track.pregap
+				&& frame < next_track.logframeofs)
+		{
+			return 0;
+		}
+	}
+
 	const track_info &trackinfo = cdtoc.tracks[track];
 
 	// When position Q is stored with the image, it is authoritative for
