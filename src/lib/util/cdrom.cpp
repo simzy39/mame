@@ -998,6 +998,7 @@ void cdrom_file::reconstruct_track_indexes()
 
 		int previous_index = -1;
 		int pending_index = -1;
+		int highest_index = 1;
 		uint32_t pending_frame = 0;
 
 		const uint32_t index01_frame =
@@ -1043,10 +1044,12 @@ if (position.index == previous_index)
 // treating it as a real transition.  Record the first observed frame.
 if (pending_index == position.index)
 {
-	if (track.idx[position.index] == -1
-		&& pending_frame >= index01_frame)
+	if (position.index > highest_index
+			&& track.idx[position.index] == -1
+			&& pending_frame >= index01_frame)
 	{
 		track.idx[position.index] = pending_frame - index01_frame;
+		highest_index = position.index;
 	}
 
 	previous_index = position.index;
