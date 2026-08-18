@@ -465,3 +465,102 @@ TEST_CASE("CD-ROM Q subchannel stored RW_RAW", "[util][cdrom]")
 
 	std::filesystem::remove_all(tempdir);
 }
+
+TEST_CASE("CD-ROM Q position generation", "[util][cdrom]")
+{
+	cdrom_file::toc toc{};
+	toc.numtrks = 1;
+
+	cdrom_file::track_info &track = toc.tracks[0];
+	track.trktype = cdrom_file::CD_TRACK_AUDIO;
+	track.control_flags = 0;
+
+	std::fill(std::begin(track.idx), std::end(track.idx), -1);
+
+	// Deliberately skip INDEX 02.  Additional indexes do not need to be
+	// numerically contiguous.
+	track.idx[3] = 225;
+	track.idx[5] = 450;
+
+	cdrom_file::q_position position;
+
+	SECTION("pregap position")
+	{
+		REQUIRE(cdrom_file::make_subcode_q_position(
+				toc,
+				0,
+				-150,
+				0,
+				position));
+
+		REQUIRE(position.track == 1);
+		REQUIRE(position.index == 0);
+		REQUIRE(position.relative_frame == 150);
+		REQUIRE(position.absolute_frame == 0);
+	}
+
+	SECTION("index 1")
+	{
+		REQUIRE(cdrom_file::make_subcode_q_position(
+				toc,
+				0,
+				224,
+				374,
+				position));
+
+		REQUIRE(position.track == 1);
+		REQUIRE(position.index == 1);
+		REQUIRE(position.relative_frame == 224);
+		REQUIRE(position.absolute_frame == 374);
+	}
+
+	SECTION("skipped index 3")
+	{
+		REQUIRE(cdrom_file::make_subcode_q_position(
+				toc,
+				0,
+				225,
+				375,
+				position));
+
+		REQUIRE(position.track == 1);
+		REQUIRE(position.index == 3);
+		REQUIRE(position.relative_frame == 225);
+		REQUIRE(position.absolute_frame == 375);
+	}
+
+	SECTION("index 5")
+	{
+		REQUIRE(cdrom_file::make_subcode_q_position(
+				toc,
+				0,
+				450,
+				600,
+				position));
+
+		REQUIRE(position.track == 1);
+		REQUIRE(position.index == 5);
+		REQUIRE(position.relative_frame == 450);
+		REQUIRE(position.absolute_frame == 600);
+	}
+
+	SECTION("invalid track")
+	{
+		REQUIRE_FALSE(cdrom_file::make_subcode_q_position(
+				toc,
+				1,
+				0,
+				150,
+				position));
+	}
+
+	SECTION("negative absolute position")
+	{
+		REQUIRE_FALSE(cdrom_file::make_subcode_q_position(
+				toc,
+				0,
+				0,
+				-1,
+				position));
+	}
+}
