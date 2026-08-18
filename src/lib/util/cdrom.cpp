@@ -1017,11 +1017,14 @@ void cdrom_file::reconstruct_track_indexes()
 				continue;
 			}
 
-			// Record only the first sector of an INDEX transition.
+			// Record only the first sector of an INDEX transition.  Derive the
+			// descriptor position from where the transition occurs in the image,
+			// rather than trusting the Q relative timestamp.
 			if (position.index != previous_index
-					&& track.idx[position.index] == -1)
+					&& track.idx[position.index] == -1
+					&& frame >= track.pregap)
 			{
-				track.idx[position.index] = position.relative_frame;
+				track.idx[position.index] = frame - track.pregap;
 			}
 
 			previous_index = position.index;
