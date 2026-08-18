@@ -307,7 +307,7 @@ TEST_CASE("CD-ROM Q subchannel later-track virtual pregap", "[util][cdrom]")
 				"\n"
 				"TRACK AUDIO\n"
 				"START 00:02:00\n"
-				"DATAFILE \"track2.bin\" 00:04:00\n";
+				"DATAFILE \"track2.bin\" 00:00:00 00:04:00\n";
 	}
 
 	cdrom_file cd(tocpath.string());
