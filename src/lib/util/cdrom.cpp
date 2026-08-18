@@ -996,6 +996,8 @@ void cdrom_file::reconstruct_track_indexes()
 		}
 
 		int previous_index = -1;
+		int pending_index = -1;
+		uint32_t pending_frame = 0;
 
 		for (uint32_t frame = 0; frame < track.frames; frame++)
 		{
@@ -1011,24 +1013,46 @@ void cdrom_file::reconstruct_track_indexes()
 				continue;
 			}
 
-			if (position.index < 2 || position.index > MAX_INDEX)
-			{
-				previous_index = position.index;
-				continue;
-			}
+		if (position.index < 2 || position.index > MAX_INDEX)
+{
+	previous_index = position.index;
+	pending_index = -1;
+	continue;
+}
 
-			// Record only the first sector of an INDEX transition.  Derive the
-			// descriptor position from where the transition occurs in the image,
-			// rather than trusting the Q relative timestamp.
-			if (previous_index >= 0
-					&& position.index != previous_index
-					&& track.idx[position.index] == -1
-					&& frame >= track.pregap)
-			{
-				track.idx[position.index] = frame - track.pregap;
-			}
+// Establish an initial state without inferring a transition.
+if (previous_index < 0)
+{
+	previous_index = position.index;
+	pending_index = -1;
+	continue;
+}
 
-			previous_index = position.index;
+// Returning to the current index cancels an unconfirmed transition.
+if (position.index == previous_index)
+{
+	pending_index = -1;
+	continue;
+}
+
+// Require the new index to appear in two valid position-Q frames before
+// treating it as a real transition.  Record the first observed frame.
+if (pending_index == position.index)
+{
+	if (track.idx[position.index] == -1
+			&& pending_frame >= track.pregap)
+	{
+		track.idx[position.index] = pending_frame - track.pregap;
+	}
+
+	previous_index = position.index;
+	pending_index = -1;
+}
+else
+{
+	pending_index = position.index;
+	pending_frame = frame;
+}
 		}
 	}
 }
