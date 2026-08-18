@@ -164,7 +164,9 @@ public:
 	bool get_subcode_raw(uint32_t lbasector, uint8_t *buffer, bool phys=false) const;
 
 	static void encode_subcode_q(const q_position &position, uint8_t *buffer);
+	static bool decode_subcode_q(const uint8_t *q, q_position &position);
 	static void pack_subcode_q(const uint8_t *q, uint8_t *subcode);
+	static void unpack_subcode_q(const uint8_t *subcode, uint8_t *q);
 	static bool make_subcode_q_position(
 			const toc &toc,
 			uint32_t tracknum,
