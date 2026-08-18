@@ -590,7 +590,7 @@ static uint8_t to_bcd(uint32_t value)
 	return ((value / 10) << 4) | (value % 10);
 }
 
-static void unpack_q_raw(const uint8_t *subcode, uint8_t *q)
+void cdrom_file::unpack_subcode_q(const uint8_t *subcode, uint8_t *q)
 {
 	for (int byte = 0; byte < 12; byte++)
 	{
@@ -729,7 +729,7 @@ bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) c
 		{
 			if (track.subtype == CD_SUB_RAW)
 			{
-				unpack_q_raw(subcode, buffer);
+				unpack_subcode_q(subcode, buffer);
 				return true;
 			}
 		}
