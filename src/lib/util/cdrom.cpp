@@ -977,6 +977,58 @@ uint32_t cdrom_file::get_track_index(uint32_t frame) const
 	return get_track_index(trackinfo, frame - track_start);
 }
 
+void cdrom_file::reconstruct_track_indexes()
+{
+	if (chd == nullptr)
+		return;
+
+	for (uint32_t tracknum = 0; tracknum < cdtoc.numtrks; tracknum++)
+	{
+		track_info &track = cdtoc.tracks[tracknum];
+
+		// Additional indexes are already available for descriptor-backed
+		// images.  CHD metadata does not currently carry INDEX 02+, so
+		// recover them from valid stored ADR=1 Q when possible.
+		if (track.subsize != MAX_SUBCODE_DATA
+				|| track.subtype != CD_SUB_RAW)
+		{
+			continue;
+		}
+
+		uint8_t previous_index = 1;
+
+		for (uint32_t frame = 0; frame < track.frames; frame++)
+		{
+			const uint32_t physframe = track.physframeofs + frame;
+
+			uint8_t q[12];
+			q_position position;
+
+			if (!get_subcode_q(physframe, q, true)
+					|| !decode_subcode_q(q, position)
+					|| position.track != tracknum + 1)
+			{
+				continue;
+			}
+
+			if (position.index < 2 || position.index > MAX_INDEX)
+			{
+				previous_index = position.index;
+				continue;
+			}
+
+			// Record only the first sector of an INDEX transition.
+			if (position.index != previous_index
+					&& track.idx[position.index] == -1)
+			{
+				track.idx[position.index] = position.relative_frame;
+			}
+
+			previous_index = position.index;
+		}
+	}
+}
+
 /***************************************************************************
     EXTRA UTILITIES
 ***************************************************************************/
