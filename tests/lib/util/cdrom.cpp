@@ -274,6 +274,132 @@ TEST_CASE("CD-ROM Q subchannel virtual pregap", "[util][cdrom]")
 	std::filesystem::remove_all(tempdir);
 }
 
+TEST_CASE("CD-ROM Q subchannel encode decode round trip", "[util][cdrom]")
+{
+	cdrom_file::q_position input;
+	input.adr_control =
+			(cdrom_file::CD_FLAG_ADR_START_TIME << 4)
+				| cdrom_file::CD_FLAG_CONTROL_DATA_TRACK;
+	input.track = 12;
+	input.index = 3;
+	input.relative_frame = (4 * 60 * 75) + (23 * 75) + 17;
+	input.absolute_frame = (37 * 60 * 75) + (41 * 75) + 62;
+
+	uint8_t q[12];
+	cdrom_file::encode_subcode_q(input, q);
+
+	require_valid_q_crc(q);
+
+	cdrom_file::q_position output;
+
+	REQUIRE(cdrom_file::decode_subcode_q(q, output));
+
+	REQUIRE(output.adr_control == input.adr_control);
+	REQUIRE(output.track == input.track);
+	REQUIRE(output.index == input.index);
+	REQUIRE(output.relative_frame == input.relative_frame);
+	REQUIRE(output.absolute_frame == input.absolute_frame);
+}
+
+
+TEST_CASE("CD-ROM Q subchannel raw packing round trip", "[util][cdrom]")
+{
+	cdrom_file::q_position position;
+	position.adr_control =
+			(cdrom_file::CD_FLAG_ADR_START_TIME << 4)
+				| cdrom_file::CD_FLAG_CONTROL_PREEMPHASIS
+				| cdrom_file::CD_FLAG_CONTROL_DIGITAL_COPY_PERMITTED;
+	position.track = 7;
+	position.index = 4;
+	position.relative_frame = (2 * 60 * 75) + (11 * 75) + 37;
+	position.absolute_frame = (18 * 60 * 75) + (52 * 75) + 9;
+
+	uint8_t original_q[12];
+	cdrom_file::encode_subcode_q(position, original_q);
+
+	uint8_t raw_subcode[96];
+	cdrom_file::pack_subcode_q(original_q, raw_subcode);
+
+	uint8_t unpacked_q[12];
+	cdrom_file::unpack_subcode_q(raw_subcode, unpacked_q);
+
+	for (int i = 0; i < 12; i++)
+		REQUIRE(unpacked_q[i] == original_q[i]);
+
+	require_valid_q_crc(unpacked_q);
+}
+
+
+TEST_CASE("CD-ROM Q subchannel decoder rejects invalid CRC", "[util][cdrom]")
+{
+	cdrom_file::q_position input;
+	input.adr_control = cdrom_file::CD_FLAG_ADR_START_TIME << 4;
+	input.track = 1;
+	input.index = 2;
+	input.relative_frame = 225;
+	input.absolute_frame = 375;
+
+	uint8_t q[12];
+	cdrom_file::encode_subcode_q(input, q);
+
+	require_valid_q_crc(q);
+
+	// Corrupt a protected byte without updating the CRC.
+	q[2] ^= 0x01;
+
+	cdrom_file::q_position output;
+	REQUIRE_FALSE(cdrom_file::decode_subcode_q(q, output));
+}
+
+TEST_CASE("CD-ROM Q subchannel decoder rejects invalid position data", "[util][cdrom]")
+{
+	cdrom_file::q_position input;
+	input.adr_control = cdrom_file::CD_FLAG_ADR_START_TIME << 4;
+	input.track = 1;
+	input.index = 1;
+	input.relative_frame = 0;
+	input.absolute_frame = 150;
+
+	uint8_t q[12];
+	cdrom_file::encode_subcode_q(input, q);
+
+	SECTION("invalid BCD")
+	{
+		q[1] = 0x1a;
+
+		const uint16_t crc = reference_q_crc(q);
+		q[10] = uint8_t(crc >> 8);
+		q[11] = uint8_t(crc);
+
+		cdrom_file::q_position output;
+		REQUIRE_FALSE(cdrom_file::decode_subcode_q(q, output));
+	}
+
+	SECTION("invalid frame number")
+	{
+		q[5] = 0x75;
+
+		const uint16_t crc = reference_q_crc(q);
+		q[10] = uint8_t(crc >> 8);
+		q[11] = uint8_t(crc);
+
+		cdrom_file::q_position output;
+		REQUIRE_FALSE(cdrom_file::decode_subcode_q(q, output));
+	}
+
+	SECTION("reserved byte is nonzero")
+	{
+		q[6] = 1;
+
+		const uint16_t crc = reference_q_crc(q);
+		q[10] = uint8_t(crc >> 8);
+		q[11] = uint8_t(crc);
+
+		cdrom_file::q_position output;
+		REQUIRE_FALSE(cdrom_file::decode_subcode_q(q, output));
+	}
+}
+
 TEST_CASE("CD-ROM Q subchannel stored RW_RAW", "[util][cdrom]")
 {
 	const std::filesystem::path tempdir =
