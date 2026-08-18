@@ -201,6 +201,7 @@ public:
 	}
 	int get_track_type(int track) const { return cdtoc.tracks[track].trktype; }
 	const toc &get_toc() const { return cdtoc; }
+	void reconstruct_track_indexes();
 
 	/* extra utilities */
 	static void convert_type_string_to_track_info(const char *typestring, track_info *info);
