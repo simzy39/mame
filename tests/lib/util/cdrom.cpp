@@ -451,7 +451,7 @@ TEST_CASE("CD-ROM Q subchannel later-track stored pregap", "[util][cdrom]")
 			std::filesystem::temp_directory_path() / "mame-cdrom-q-later-stored-pregap-test";
 	const std::filesystem::path track1path = tempdir / "track1.bin";
 	const std::filesystem::path track2path = tempdir / "track2.bin";
-	const std::filesystem::path tocpath = tempdir / "later-stored.toc";
+	const std::filesystem::path cuepath = tempdir / "later-stored.cue";
 
 	std::filesystem::remove_all(tempdir);
 	std::filesystem::create_directories(tempdir);
@@ -469,29 +469,20 @@ TEST_CASE("CD-ROM Q subchannel later-track stored pregap", "[util][cdrom]")
 	}
 
 	{
-		std::ofstream toc(tocpath);
-		toc <<
-				"CD_DA\n"
-				"\n"
-				"TRACK AUDIO\n"
-				"DATAFILE \"track1.bin\" 00:03:00\n"
-				"\n"
-				"TRACK AUDIO\n"
-				"DATAFILE \"track2.bin\" 00:00:00 00:06:00\n"
-				"START 00:02:00\n";
+		std::ofstream cue(cuepath);
+		cue <<
+				"FILE \"track1.bin\" BINARY\n"
+				"  TRACK 01 AUDIO\n"
+				"    INDEX 01 00:00:00\n"
+				"FILE \"track2.bin\" BINARY\n"
+				"  TRACK 02 AUDIO\n"
+				"    INDEX 00 00:00:00\n"
+				"    INDEX 01 00:02:00\n";
 	}
 
-	cdrom_file cd(tocpath.string());
+	cdrom_file cd(cuepath.string());
 
 	uint8_t q[12];
-
-	const cdrom_file::toc &parsed_toc = cd.get_toc();
-
-	INFO("track 2 pregap = " << parsed_toc.tracks[1].pregap);
-	INFO("track 2 pgdatasize = " << parsed_toc.tracks[1].pgdatasize);
-	INFO("track 2 physframeofs = " << parsed_toc.tracks[1].physframeofs);
-	INFO("track 2 logframeofs = " << parsed_toc.tracks[1].logframeofs);
-	INFO("track 2 frames = " << parsed_toc.tracks[1].frames);
 
 	// Track 2's physically stored pregap begins at physical frame 225.
 	REQUIRE(cd.get_subcode_q(225, q, true));
