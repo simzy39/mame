@@ -306,7 +306,7 @@ TEST_CASE("CD-ROM Q subchannel later-track virtual pregap", "[util][cdrom]")
 				"DATAFILE \"track1.bin\" 00:03:00\n"
 				"\n"
 				"TRACK AUDIO\n"
-				"PREGAP 00:02:00\n"
+				"START 00:02:00\n"
 				"DATAFILE \"track2.bin\" 00:04:00\n";
 	}
 
