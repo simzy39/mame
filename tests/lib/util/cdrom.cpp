@@ -226,6 +226,14 @@ TEST_CASE("CD-ROM Q subchannel virtual pregap", "[util][cdrom]")
 
 	uint8_t q[12];
 
+	const cdrom_file::toc &parsed_toc = cd.get_toc();
+
+	INFO("track 1 logframeofs = " << parsed_toc.tracks[0].logframeofs);
+	INFO("track 1 frames = " << parsed_toc.tracks[0].frames);
+	INFO("track 2 logframeofs = " << parsed_toc.tracks[1].logframeofs);
+	INFO("track 2 pregap = " << parsed_toc.tracks[1].pregap);
+	INFO("track 2 pgdatasize = " << parsed_toc.tracks[1].pgdatasize);
+
 	// Logical access to the virtual pregap synthesizes INDEX 00.
 	REQUIRE(cd.get_subcode_q(0, q));
 	REQUIRE(q[2] == 0x00);
