@@ -485,6 +485,14 @@ TEST_CASE("CD-ROM Q subchannel later-track stored pregap", "[util][cdrom]")
 
 	uint8_t q[12];
 
+	const cdrom_file::toc &parsed_toc = cd.get_toc();
+
+	INFO("track 2 pregap = " << parsed_toc.tracks[1].pregap);
+	INFO("track 2 pgdatasize = " << parsed_toc.tracks[1].pgdatasize);
+	INFO("track 2 physframeofs = " << parsed_toc.tracks[1].physframeofs);
+	INFO("track 2 logframeofs = " << parsed_toc.tracks[1].logframeofs);
+	INFO("track 2 frames = " << parsed_toc.tracks[1].frames);
+
 	// Track 2's physically stored pregap begins at physical frame 225.
 	REQUIRE(cd.get_subcode_q(225, q, true));
 	REQUIRE(q[1] == 0x02);
