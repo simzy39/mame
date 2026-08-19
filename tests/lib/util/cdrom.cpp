@@ -820,7 +820,7 @@ TEST_CASE("CD-ROM invalid stored Q falls back to semantic index", "[util][cdrom]
 			{
 				0x01,
 				0x01,
-				0x07,       // deliberately bogus semantic index
+				0x07,       // deliberately conflicts with semantic INDEX 01/02
 				0x00, 0x00, 0x00,
 				0x00,
 				0x00, 0x00, 0x00,
@@ -842,16 +842,34 @@ TEST_CASE("CD-ROM invalid stored Q falls back to semantic index", "[util][cdrom]
 		std::ofstream cue(cuepath);
 		cue <<
 				"FILE \"track.bin\" BINARY\n"
-				"  TRACK 01 AUDIO\n"
+				"  TRACK 01 AUDIO RW_RAW\n"
 				"    INDEX 01 00:00:00\n"
 				"    INDEX 02 00:03:00\n";
 	}
 
 	cdrom_file cd(cuepath.string());
 
-	// Invalid captured Q must not replace the descriptor's semantic indexes.
+	const cdrom_file::toc &parsed_toc = cd.get_toc();
+
+	// Make sure this fixture really exercises captured raw subcode.
+	REQUIRE(parsed_toc.tracks[0].subtype == cdrom_file::CD_SUB_RAW);
+	REQUIRE(parsed_toc.tracks[0].subsize == 96);
+	REQUIRE(parsed_toc.tracks[0].idx[2] == 225);
+
+	// The stored Q claims INDEX 07, but its CRC is invalid.  Runtime index
+	// lookup must reject it and fall back to the descriptor's INDEX 01/02.
 	REQUIRE(cd.get_track_index(224) == 1);
 	REQUIRE(cd.get_track_index(225) == 2);
+	REQUIRE(cd.get_track_index(449) == 2);
+
+	// Captured Q itself is still returned unchanged; validation happens
+	// when it is decoded for semantic index lookup.
+	uint8_t q[12];
+	REQUIRE(cd.get_subcode_q(225, q));
+	REQUIRE(q[2] == 0x07);
+
+	cdrom_file::q_position position;
+	REQUIRE_FALSE(cdrom_file::decode_subcode_q(q, position));
 
 	std::filesystem::remove_all(tempdir);
 }
