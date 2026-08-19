@@ -994,6 +994,15 @@ uint32_t cdrom_file::get_track_index(uint32_t frame) const
 	uint32_t track = 0;
 	logical_to_chd_lba(frame, track);
 
+		// Track 1 can have a virtual pregap before its INDEX 01 position.
+	if (track == 0
+			&& cdtoc.tracks[0].pgdatasize == 0
+			&& cdtoc.tracks[0].pregap != 0
+			&& frame < cdtoc.tracks[0].logframeofs)
+	{
+		return 0;
+	}
+
 	// A virtual pregap belongs to the upcoming track and is INDEX 00.
 	if (track + 1 < cdtoc.numtrks)
 	{
@@ -1112,6 +1121,19 @@ if (pending_index == position.index)
 }
 else
 {
+	// A one-frame forward index followed immediately by a higher index is
+	// still a valid monotonic transition.
+	if (pending_index >= 2
+			&& position.index > pending_index
+			&& pending_index > highest_index
+			&& track.idx[pending_index] == -1
+			&& pending_frame >= index01_frame)
+	{
+		track.idx[pending_index] = pending_frame - index01_frame;
+		highest_index = pending_index;
+		previous_index = pending_index;
+	}
+
 	pending_index = position.index;
 	pending_frame = frame;
 }
