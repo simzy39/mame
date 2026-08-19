@@ -271,6 +271,11 @@ TEST_CASE("CD-ROM Q subchannel virtual pregap", "[util][cdrom]")
 	REQUIRE(q[9] == 0x00);
 	require_valid_q_crc(q);
 
+	// Runtime index lookup must also recognize Track 1's virtual pregap.
+	REQUIRE(cd.get_track_index(0) == 0);
+	REQUIRE(cd.get_track_index(149) == 0);
+	REQUIRE(cd.get_track_index(150) == 1);
+	
 	std::filesystem::remove_all(tempdir);
 }
 
