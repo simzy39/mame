@@ -201,16 +201,12 @@ REQUIRE_FALSE(chd.read_metadata(
 		0,
 		index_metadata));
 
-INFO("index metadata 0 = " << index_metadata);
-
 REQUIRE(strcmp(index_metadata.c_str(), "TRACK:1 INDEX:2 FRAME:4") == 0);
 
 REQUIRE_FALSE(chd.read_metadata(
 		CDROM_TRACK_INDEX_METADATA_TAG,
 		1,
 		index_metadata));
-
-INFO("index metadata 1 = " << index_metadata);
 
 REQUIRE(strcmp(index_metadata.c_str(), "TRACK:1 INDEX:3 FRAME:6") == 0);
 	
