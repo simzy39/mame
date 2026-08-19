@@ -147,17 +147,9 @@ TEST_CASE("CD CHD reconstructs track indexes from stored Q", "[util][chd][cdrom]
 	write_frame(16, 4, false, 2);
 	write_frame(17, 4);
 
-	// The CHD constructor must derive its TOC from CHD metadata rather than
-	// from the source structure above.
+	// The CHD constructor must derive its TOC from CHD metadata and
+	// reconstruct additional indexes from stored position Q.
 	cdrom_file cd(&chd);
-
-	const cdrom_file::toc &before = cd.get_toc();
-
-	REQUIRE(before.tracks[0].idx[2] == -1);
-	REQUIRE(before.tracks[0].idx[3] == -1);
-	REQUIRE(before.tracks[0].idx[4] == -1);
-
-	cd.reconstruct_track_indexes();
 
 	const cdrom_file::toc &after = cd.get_toc();
 
@@ -285,11 +277,7 @@ TEST_CASE("CD CHD reconstructs indexes relative to stored pregap", "[util][chd][
 	write_frame(6, 2, 4);
 	write_frame(7, 2, 5);
 
-	cdrom_file cd(&chd);
-
-	REQUIRE(cd.get_toc().tracks[0].idx[2] == -1);
-
-	cd.reconstruct_track_indexes();
+		cdrom_file cd(&chd);
 
 	// The physical transition occurs at frame 5, but idx[] coordinates are
 	// relative to INDEX 01 at physical frame 2.
@@ -400,16 +388,9 @@ TEST_CASE("CD CHD reconstructs indexes on later track", "[util][chd][cdrom]")
 
 	cdrom_file cd(&chd);
 
-	const cdrom_file::toc &before = cd.get_toc();
-
-	REQUIRE(before.tracks[0].idx[2] == -1);
-	REQUIRE(before.tracks[1].idx[2] == -1);
-
 	// Confirm the track boundary itself is where the fixture expects it.
 	REQUIRE(cd.get_track(3) == 0);
 	REQUIRE(cd.get_track(4) == 1);
-
-	cd.reconstruct_track_indexes();
 
 	const cdrom_file::toc &after = cd.get_toc();
 
@@ -547,16 +528,13 @@ TEST_CASE("CD CHD reconstructs later-track index relative to stored pregap", "[u
 
 	cdrom_file cd(&chd);
 
-	const cdrom_file::toc &before = cd.get_toc();
-
-	REQUIRE(before.tracks[1].pregap == track2_pregap);
-	REQUIRE(before.tracks[1].pgdatasize != 0);
-	REQUIRE(before.tracks[1].physframeofs == track1_frames);
-	REQUIRE(before.tracks[1].idx[2] == -1);
-
-	cd.reconstruct_track_indexes();
+	cdrom_file cd(&chd);
 
 	const cdrom_file::toc &after = cd.get_toc();
+
+	REQUIRE(after.tracks[1].pregap == track2_pregap);
+	REQUIRE(after.tracks[1].pgdatasize != 0);
+	REQUIRE(after.tracks[1].physframeofs == track1_frames);
 
 	// Physical transition: frame 9.
 	// Track 2 INDEX 01: physical frame 6.
