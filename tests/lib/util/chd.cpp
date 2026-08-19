@@ -40,7 +40,7 @@ TEST_CASE("CD CHD reconstructs track indexes from stored Q", "[util][chd][cdrom]
 	std::filesystem::remove_all(tempdir);
 	std::filesystem::create_directories(tempdir);
 
-	constexpr uint32_t frame_count = 12;
+	constexpr uint32_t frame_count = 14;
 	constexpr uint32_t hunk_bytes =
 			cdrom_file::FRAME_SIZE * cdrom_file::FRAMES_PER_HUNK;
 
@@ -130,6 +130,11 @@ TEST_CASE("CD CHD reconstructs track indexes from stored Q", "[util][chd][cdrom]
 	write_frame(10, 4, true);
 	write_frame(11, 4);
 
+	// An invalid Q frame must also break a pending transition.  Two valid
+	// INDEX 04 observations separated by invalid Q are not consecutive.
+	write_frame(12, 4, true);
+	write_frame(13, 4);
+
 	// The CHD constructor must derive its TOC from CHD metadata rather than
 	// from the source structure above.
 	cdrom_file cd(&chd);
@@ -160,6 +165,10 @@ TEST_CASE("CD CHD reconstructs track indexes from stored Q", "[util][chd][cdrom]
 	// The following valid captured INDEX 04 is authoritative at runtime even
 	// though it was not sufficiently confirmed for semantic reconstruction.
 	REQUIRE(cd.get_track_index(11) == 4);
+
+	// The final valid INDEX 04 is authoritative at runtime, even though the
+	// interrupted transition must not be reconstructed semantically.
+	REQUIRE(cd.get_track_index(13) == 4);
 
 	chd.close();
 	std::filesystem::remove_all(tempdir);
