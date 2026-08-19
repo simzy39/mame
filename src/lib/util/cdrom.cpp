@@ -1069,6 +1069,7 @@ void cdrom_file::reconstruct_track_indexes()
 					|| !decode_subcode_q(q, position)
 					|| position.track != tracknum + 1)
 			{
+				pending_index = -1;
 				continue;
 			}
 
