@@ -1604,14 +1604,14 @@ std::error_condition cdrom_file::write_metadata(chd_file *chd, const toc &toc)
 
 		std::string metadata;
 		
-		if (toc.numsessions > 1 && sessionnum != toc.tracks[i].session)
+			if (toc.numsessions > 1 && sessionnum != toc.tracks[i].session)
 		{
 			metadata = util::string_format(CDROM_SESSION_METADATA_FORMAT, toc.tracks[i].session+1);
 			err = chd->write_metadata(CDROM_SESSION_METADATA_TAG, i, metadata);
-	
+
 			if (err)
 				return err;
-		
+
 			sessionnum = toc.tracks[i].session;
 		}
 
@@ -1632,8 +1632,28 @@ std::error_condition cdrom_file::write_metadata(chd_file *chd, const toc &toc)
 					toc.tracks[i].postgap);
 			err = chd->write_metadata(CDROM_TRACK_METADATA2_TAG, i, metadata);
 		}
-		if (err)
+				if (err)
 			return err;
+
+		for (int index = 2; index <= MAX_INDEX; index++)
+		{
+			if (toc.tracks[i].idx[index] == -1)
+				continue;
+
+			metadata = util::string_format(
+					CDROM_TRACK_INDEX_METADATA_FORMAT,
+					i + 1,
+					index,
+					toc.tracks[i].idx[index]);
+
+			err = chd->write_metadata(
+					CDROM_TRACK_INDEX_METADATA_TAG,
+					CHDMETAINDEX_APPEND,
+					metadata);
+
+			if (err)
+				return err;
+		}
 	}
 
 	return std::error_condition();
