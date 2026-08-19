@@ -428,3 +428,149 @@ TEST_CASE("CD CHD reconstructs indexes on later track", "[util][chd][cdrom]")
 	chd.close();
 	std::filesystem::remove_all(tempdir);
 }
+
+TEST_CASE("CD CHD reconstructs later-track index relative to stored pregap", "[util][chd][cdrom]")
+{
+	const std::filesystem::path tempdir =
+			std::filesystem::temp_directory_path() / "mame-chd-cd-q-later-pregap-test";
+	const std::filesystem::path chdpath = tempdir / "later-pregap.chd";
+
+	std::filesystem::remove_all(tempdir);
+	std::filesystem::create_directories(tempdir);
+
+	constexpr uint32_t track1_frames = 4;
+	constexpr uint32_t track2_frames = 10;
+	constexpr uint32_t track2_pregap = 2;
+	constexpr uint32_t frame_count = track1_frames + track2_frames;
+	constexpr uint32_t hunk_bytes =
+			cdrom_file::FRAME_SIZE * cdrom_file::FRAMES_PER_HUNK;
+
+	const chd_codec_type compression[4] =
+	{
+		CHD_CODEC_NONE,
+		CHD_CODEC_NONE,
+		CHD_CODEC_NONE,
+		CHD_CODEC_NONE
+	};
+
+	chd_file chd;
+
+	REQUIRE_FALSE(chd.create(
+			chdpath.string(),
+			uint64_t(frame_count) * cdrom_file::FRAME_SIZE,
+			hunk_bytes,
+			cdrom_file::FRAME_SIZE,
+			compression));
+
+	cdrom_file::toc toc{};
+	toc.numtrks = 2;
+	toc.numsessions = 1;
+
+	for (int tracknum = 0; tracknum < 2; tracknum++)
+	{
+		cdrom_file::track_info &track = toc.tracks[tracknum];
+
+		track.trktype = cdrom_file::CD_TRACK_AUDIO;
+		track.subtype = cdrom_file::CD_SUB_RAW;
+		track.datasize = cdrom_file::MAX_SECTOR_DATA;
+		track.subsize = cdrom_file::MAX_SUBCODE_DATA;
+		track.frames = (tracknum == 0) ? track1_frames : track2_frames;
+		track.pregap = (tracknum == 0) ? 0 : track2_pregap;
+		track.postgap = 0;
+		track.control_flags = 0;
+		track.session = 0;
+
+		if (tracknum == 0)
+		{
+			track.pgtype = cdrom_file::CD_TRACK_AUDIO;
+			track.pgsub = cdrom_file::CD_SUB_NONE;
+			track.pgdatasize = 0;
+			track.pgsubsize = 0;
+		}
+		else
+		{
+			// Track 2's pregap is physically stored in the CHD.
+			track.pgtype = cdrom_file::CD_TRACK_AUDIO;
+			track.pgsub = cdrom_file::CD_SUB_RAW;
+			track.pgdatasize = cdrom_file::MAX_SECTOR_DATA;
+			track.pgsubsize = cdrom_file::MAX_SUBCODE_DATA;
+		}
+
+		std::fill(std::begin(track.idx), std::end(track.idx), -1);
+	}
+
+	REQUIRE_FALSE(cdrom_file::write_metadata(&chd, toc));
+
+	std::vector<uint8_t> frame(cdrom_file::FRAME_SIZE, 0);
+
+	auto write_frame =
+			[&chd, &frame](
+					uint32_t physical_frame,
+					uint8_t track_number,
+					uint8_t index,
+					uint32_t relative_frame,
+					uint32_t absolute_frame)
+			{
+				std::fill(frame.begin(), frame.end(), 0);
+
+				make_position_q(
+						index,
+						relative_frame,
+						absolute_frame,
+						frame.data() + cdrom_file::MAX_SECTOR_DATA,
+						false,
+						track_number);
+
+				REQUIRE_FALSE(chd.write_units(physical_frame, frame.data()));
+			};
+
+	// Track 1 occupies physical frames 0-3.
+	for (uint32_t frame = 0; frame < track1_frames; frame++)
+		write_frame(frame, 1, 1, frame, 150 + frame);
+
+	// Track 2 begins physically at frame 4 with a two-frame stored pregap.
+	// Its INDEX 01 therefore begins at physical frame 6.
+	write_frame(4, 2, 0, 2, 154);
+	write_frame(5, 2, 0, 1, 155);
+
+	write_frame(6, 2, 1, 0, 156);
+	write_frame(7, 2, 1, 1, 157);
+	write_frame(8, 2, 1, 2, 158);
+
+	// INDEX 02 begins three frames after Track 2 INDEX 01.
+	// Physically this is frame 9, but semantic idx[2] must be 3.
+	write_frame(9, 2, 2, 3, 159);
+	write_frame(10, 2, 2, 4, 160);
+	write_frame(11, 2, 2, 5, 161);
+	write_frame(12, 2, 2, 6, 162);
+	write_frame(13, 2, 2, 7, 163);
+
+	cdrom_file cd(&chd);
+
+	const cdrom_file::toc &before = cd.get_toc();
+
+	REQUIRE(before.tracks[1].pregap == track2_pregap);
+	REQUIRE(before.tracks[1].pgdatasize != 0);
+	REQUIRE(before.tracks[1].physframeofs == track1_frames);
+	REQUIRE(before.tracks[1].idx[2] == -1);
+
+	cd.reconstruct_track_indexes();
+
+	const cdrom_file::toc &after = cd.get_toc();
+
+	// Physical transition: frame 9.
+	// Track 2 INDEX 01: physical frame 6.
+	// Therefore semantic INDEX 02 offset must be 3.
+	REQUIRE(after.tracks[1].idx[2] == 3);
+
+	// Track 1 must remain untouched.
+	REQUIRE(after.tracks[0].idx[2] == -1);
+
+	// Runtime lookup agrees across the Track 2 INDEX 01/02 boundary.
+	REQUIRE(cd.get_track_index(8) == 1);
+	REQUIRE(cd.get_track_index(9) == 2);
+	REQUIRE(cd.get_track_index(10) == 2);
+
+	chd.close();
+	std::filesystem::remove_all(tempdir);
+}
