@@ -228,6 +228,8 @@ cdrom_file::cdrom_file(std::string_view inputfile)
 	track.logframeofs = logofs;
 	track.chdframeofs = 0;
 	track.logframes = 0;
+
+	reconstruct_track_indexes();
 }
 
 /*-------------------------------------------------
@@ -1042,8 +1044,7 @@ void cdrom_file::reconstruct_track_indexes()
 		track_info &track = cdtoc.tracks[tracknum];
 
 		// Additional indexes are already available for descriptor-backed
-		// images.  CHD metadata does not currently carry INDEX 02+, so
-		// recover them from valid stored ADR=1 Q when possible.
+		// images.  For CHDs, recover INDEX 02+ from stored ADR=1 Q.
 		if (track.subsize != MAX_SUBCODE_DATA
 				|| track.subtype != CD_SUB_RAW)
 		{
@@ -1512,54 +1513,11 @@ std::error_condition cdrom_file::parse_metadata(chd_file *chd, toc &toc)
 	if (toc.numsessions > 1)
 		toc.flags |= CD_FLAG_MULTISESSION;
 
-	/* load any additional track index metadata */
+	// if we got any tracks this way, we're done
 	if (toc.numtrks > 0)
-	{
-		for (uint32_t metaindex = 0; ; metaindex++)
-		{
-			err = chd->read_metadata(
-					CDROM_TRACK_INDEX_METADATA_TAG,
-					metaindex,
-					metadata);
-
-			if (err == chd_file::error::METADATA_NOT_FOUND)
-				break;
-
-			if (err)
-				return err;
-
-			int tracknum;
-			int index;
-			int frame;
-
-			if (sscanf(
-					metadata.c_str(),
-					CDROM_TRACK_INDEX_METADATA_FORMAT,
-					&tracknum,
-					&index,
-					&frame) != 3)
-			{
-				return chd_file::error::INVALID_DATA;
-			}
-
-			if (tracknum <= 0
-					|| tracknum > toc.numtrks
-					|| index < 2
-					|| index > MAX_INDEX
-					|| frame < 0)
-			{
-				return chd_file::error::INVALID_DATA;
-			}
-
-			toc.tracks[tracknum - 1].idx[index] = frame;
-		}
-
 		return std::error_condition();
-	}
 
-	osd_printf_info("toc.numtrks = %u?!\n", toc.numtrks);
-
-	/* look for old-style metadata */
+	// look for old-style metadata
 	std::vector<uint8_t> oldmetadata;
 	err = chd->read_metadata(CDROM_OLD_METADATA_TAG, 0, oldmetadata);
 	if (err)
@@ -1675,26 +1633,6 @@ std::error_condition cdrom_file::write_metadata(chd_file *chd, const toc &toc)
 		}
 				if (err)
 			return err;
-
-		for (int index = 2; index <= MAX_INDEX; index++)
-		{
-			if (toc.tracks[i].idx[index] == -1)
-				continue;
-
-			metadata = util::string_format(
-					CDROM_TRACK_INDEX_METADATA_FORMAT,
-					i + 1,
-					index,
-					toc.tracks[i].idx[index]);
-
-			err = chd->write_metadata(
-					CDROM_TRACK_INDEX_METADATA_TAG,
-					CHDMETAINDEX_APPEND,
-					metadata);
-
-			if (err)
-				return err;
-		}
 	}
 
 	return std::error_condition();
