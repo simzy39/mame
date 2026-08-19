@@ -41,7 +41,7 @@ TEST_CASE("CD CHD reconstructs track indexes from stored Q", "[util][chd][cdrom]
 	std::filesystem::remove_all(tempdir);
 	std::filesystem::create_directories(tempdir);
 
-	constexpr uint32_t frame_count = 17;
+	constexpr uint32_t frame_count = 18;
 	constexpr uint32_t hunk_bytes =
 			cdrom_file::FRAME_SIZE * cdrom_file::FRAMES_PER_HUNK;
 
@@ -138,11 +138,14 @@ TEST_CASE("CD CHD reconstructs track indexes from stored Q", "[util][chd][cdrom]
 	write_frame(12, 4, true);
 	write_frame(13, 4);
 
+	// Separate this case from the preceding interrupted transition.
+	write_frame(14, 3, true);
+
 	// A valid position-Q frame for the wrong track must also interrupt a
 	// pending transition.
-	write_frame(14, 4);
-	write_frame(15, 4, false, 2);
-	write_frame(16, 4);
+	write_frame(15, 4);
+	write_frame(16, 4, false, 2);
+	write_frame(17, 4);
 
 	// The CHD constructor must derive its TOC from CHD metadata rather than
 	// from the source structure above.
@@ -181,12 +184,12 @@ TEST_CASE("CD CHD reconstructs track indexes from stored Q", "[util][chd][cdrom]
 
 	// The valid INDEX 04 frames on either side of the wrong-track Q are still
 	// authoritative individually at runtime.
-	REQUIRE(cd.get_track_index(14) == 4);
-	REQUIRE(cd.get_track_index(16) == 4);
+	REQUIRE(cd.get_track_index(15) == 4);
+	REQUIRE(cd.get_track_index(17) == 4);
 
 	// Wrong-track Q is rejected for semantic lookup, so this sector falls back
 	// to the reconstructed semantic table.
-	REQUIRE(cd.get_track_index(15) == 3);
+	REQUIRE(cd.get_track_index(16) == 3);
 
 	chd.close();
 	std::filesystem::remove_all(tempdir);
