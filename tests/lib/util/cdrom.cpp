@@ -800,6 +800,62 @@ TEST_CASE("CD-ROM stored Q later-track index lookup", "[util][cdrom]")
 	std::filesystem::remove_all(tempdir);
 }
 
+TEST_CASE("CD-ROM invalid stored Q falls back to semantic index", "[util][cdrom]")
+{
+	const std::filesystem::path tempdir =
+			std::filesystem::temp_directory_path() / "mame-cdrom-invalid-stored-q-index-test";
+	const std::filesystem::path binpath = tempdir / "track.bin";
+	const std::filesystem::path cuepath = tempdir / "track.cue";
+
+	std::filesystem::remove_all(tempdir);
+	std::filesystem::create_directories(tempdir);
+
+	{
+		std::ofstream bin(binpath, std::ios::binary);
+		const std::vector<char> audio(2352, 0);
+
+		for (int frame = 0; frame < 6 * 75; frame++)
+		{
+			uint8_t q[12] =
+			{
+				0x01,
+				0x01,
+				0x07,       // deliberately bogus semantic index
+				0x00, 0x00, 0x00,
+				0x00,
+				0x00, 0x00, 0x00,
+				0x00, 0x00
+			};
+
+			// Deliberately leave the CRC invalid.
+			uint8_t raw_subcode[96];
+			interleave_q_raw(q, raw_subcode);
+
+			bin.write(audio.data(), audio.size());
+			bin.write(
+					reinterpret_cast<const char *>(raw_subcode),
+					sizeof(raw_subcode));
+		}
+	}
+
+	{
+		std::ofstream cue(cuepath);
+		cue <<
+				"FILE \"track.bin\" BINARY\n"
+				"  TRACK 01 AUDIO\n"
+				"    INDEX 01 00:00:00\n"
+				"    INDEX 02 00:03:00\n";
+	}
+
+	cdrom_file cd(cuepath.string());
+
+	// Invalid captured Q must not replace the descriptor's semantic indexes.
+	REQUIRE(cd.get_track_index(224) == 1);
+	REQUIRE(cd.get_track_index(225) == 2);
+
+	std::filesystem::remove_all(tempdir);
+}
+
 TEST_CASE("CD-ROM Q position generation", "[util][cdrom]")
 {
 	cdrom_file::toc toc{};
