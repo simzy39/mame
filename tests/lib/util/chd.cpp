@@ -12,11 +12,12 @@ static void make_position_q(
 		uint32_t relative_frame,
 		uint32_t absolute_frame,
 		uint8_t *subcode,
-		bool corrupt_crc = false)
+		bool corrupt_crc = false,
+		uint8_t track_number = 1)
 {
 	cdrom_file::q_position position;
 	position.adr_control = cdrom_file::CD_FLAG_ADR_START_TIME << 4;
-	position.track = 1;
+	position.track = track_number;
 	position.index = index;
 	position.relative_frame = relative_frame;
 	position.absolute_frame = absolute_frame;
@@ -40,7 +41,7 @@ TEST_CASE("CD CHD reconstructs track indexes from stored Q", "[util][chd][cdrom]
 	std::filesystem::remove_all(tempdir);
 	std::filesystem::create_directories(tempdir);
 
-	constexpr uint32_t frame_count = 14;
+	constexpr uint32_t frame_count = 17;
 	constexpr uint32_t hunk_bytes =
 			cdrom_file::FRAME_SIZE * cdrom_file::FRAMES_PER_HUNK;
 
@@ -87,22 +88,24 @@ TEST_CASE("CD CHD reconstructs track indexes from stored Q", "[util][chd][cdrom]
 	std::vector<uint8_t> frame(cdrom_file::FRAME_SIZE, 0);
 
 	auto write_frame =
-			[&chd, &frame](
-					uint32_t framenum,
-					uint8_t index,
-					bool corrupt_crc = false)
-			{
-				std::fill(frame.begin(), frame.end(), 0);
+		[&chd, &frame](
+				uint32_t framenum,
+				uint8_t index,
+				bool corrupt_crc = false,
+				uint8_t track_number = 1)
+		{
+			std::fill(frame.begin(), frame.end(), 0);
 
-				make_position_q(
-						index,
-						framenum,
-						150 + framenum,
-						frame.data() + cdrom_file::MAX_SECTOR_DATA,
-						corrupt_crc);
+			make_position_q(
+					index,
+					framenum,
+					150 + framenum,
+					frame.data() + cdrom_file::MAX_SECTOR_DATA,
+					corrupt_crc,
+					track_number);
 
-				REQUIRE_FALSE(chd.write_units(framenum, frame.data()));
-			};
+			REQUIRE_FALSE(chd.write_units(framenum, frame.data()));
+		};
 
 	// Establish INDEX 01.
 	write_frame(0, 1);
@@ -134,6 +137,12 @@ TEST_CASE("CD CHD reconstructs track indexes from stored Q", "[util][chd][cdrom]
 	// INDEX 04 observations separated by invalid Q are not consecutive.
 	write_frame(12, 4, true);
 	write_frame(13, 4);
+
+	// A valid position-Q frame for the wrong track must also interrupt a
+	// pending transition.
+	write_frame(14, 4);
+	write_frame(15, 4, false, 2);
+	write_frame(16, 4);
 
 	// The CHD constructor must derive its TOC from CHD metadata rather than
 	// from the source structure above.
@@ -169,6 +178,15 @@ TEST_CASE("CD CHD reconstructs track indexes from stored Q", "[util][chd][cdrom]
 	// The final valid INDEX 04 is authoritative at runtime, even though the
 	// interrupted transition must not be reconstructed semantically.
 	REQUIRE(cd.get_track_index(13) == 4);
+
+	// The valid INDEX 04 frames on either side of the wrong-track Q are still
+	// authoritative individually at runtime.
+	REQUIRE(cd.get_track_index(14) == 4);
+	REQUIRE(cd.get_track_index(16) == 4);
+
+	// Wrong-track Q is rejected for semantic lookup, so this sector falls back
+	// to the reconstructed semantic table.
+	REQUIRE(cd.get_track_index(15) == 3);
 
 	chd.close();
 	std::filesystem::remove_all(tempdir);
