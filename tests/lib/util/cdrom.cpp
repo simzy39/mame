@@ -715,6 +715,91 @@ TEST_CASE("CD-ROM Q subchannel stored RW_RAW", "[util][cdrom]")
 	std::filesystem::remove_all(tempdir);
 }
 
+TEST_CASE("CD-ROM stored Q later-track index lookup", "[util][cdrom]")
+{
+	const std::filesystem::path tempdir =
+			std::filesystem::temp_directory_path() / "mame-cdrom-stored-q-later-index-test";
+	const std::filesystem::path track1path = tempdir / "track1.bin";
+	const std::filesystem::path track2path = tempdir / "track2.bin";
+	const std::filesystem::path tocpath = tempdir / "stored-q-later-index.toc";
+
+	std::filesystem::remove_all(tempdir);
+	std::filesystem::create_directories(tempdir);
+
+	{
+		std::ofstream bin(track1path, std::ios::binary);
+		const std::vector<char> data(3 * 75 * 2352, 0);
+		bin.write(data.data(), data.size());
+	}
+
+	{
+		std::ofstream bin(track2path, std::ios::binary);
+		const std::vector<char> audio(2352, 0);
+
+		for (int frame = 0; frame < 6 * 75; frame++)
+		{
+			uint8_t q[12] =
+			{
+				0x01,       // ADR=1, CONTROL=0
+				0x02,       // track 2
+				uint8_t(frame < 3 * 75 ? 0x01 : 0x02),
+				0x00, 0x00, 0x00,
+				0x00,
+				0x00, 0x00, 0x00,
+				0x00, 0x00
+			};
+
+			const uint16_t crc = reference_q_crc(q);
+			q[10] = uint8_t(crc >> 8);
+			q[11] = uint8_t(crc);
+
+			uint8_t raw_subcode[96];
+			interleave_q_raw(q, raw_subcode);
+
+			bin.write(audio.data(), audio.size());
+			bin.write(
+					reinterpret_cast<const char *>(raw_subcode),
+					sizeof(raw_subcode));
+		}
+	}
+
+	{
+		std::ofstream toc(tocpath);
+		toc <<
+				"CD_DA\n"
+				"\n"
+				"TRACK AUDIO\n"
+				"DATAFILE \"track1.bin\" 00:03:00\n"
+				"\n"
+				"TRACK AUDIO RW_RAW\n"
+				"DATAFILE \"track2.bin\" 00:00:00 00:06:00\n";
+	}
+
+	cdrom_file cd(tocpath.string());
+
+	// Track 2 begins at logical frame 225.  Its stored Q changes
+	// from INDEX 01 to INDEX 02 three seconds later.
+	REQUIRE(cd.get_track_index(224) == 1);
+	REQUIRE(cd.get_track_index(225) == 1);
+	REQUIRE(cd.get_track_index(449) == 1);
+	REQUIRE(cd.get_track_index(450) == 2);
+	REQUIRE(cd.get_track_index(451) == 2);
+
+	uint8_t q[12];
+
+	REQUIRE(cd.get_subcode_q(449, q));
+	REQUIRE(q[1] == 0x02);
+	REQUIRE(q[2] == 0x01);
+	require_valid_q_crc(q);
+
+	REQUIRE(cd.get_subcode_q(450, q));
+	REQUIRE(q[1] == 0x02);
+	REQUIRE(q[2] == 0x02);
+	require_valid_q_crc(q);
+
+	std::filesystem::remove_all(tempdir);
+}
+
 TEST_CASE("CD-ROM Q position generation", "[util][cdrom]")
 {
 	cdrom_file::toc toc{};
