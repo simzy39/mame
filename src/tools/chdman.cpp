@@ -2712,7 +2712,7 @@ static void do_copy(parameters_map &params)
 			if (err)
 				report_error(1, "Error writing upgraded CD metadata: %s", err.message());
 			if (cdda_swap)
-				chd->m_source_toc = &toc;
+				chd->m_toc = &toc;
 		}
 
 		// compress it generically
