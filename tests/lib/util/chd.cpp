@@ -191,6 +191,26 @@ TEST_CASE("CD CHD reconstructs track indexes from stored Q", "[util][chd][cdrom]
 	// to the reconstructed semantic table.
 	REQUIRE(cd.get_track_index(16) == 3);
 
+	// Persist the reconstructed semantic indexes into CHD metadata.
+	REQUIRE_FALSE(cdrom_file::write_metadata(&chd, after));
+
+	// A fresh cdrom_file must recover INDEX 02+ directly from metadata,
+	// without requiring another Q reconstruction pass.
+	cdrom_file reopened(&chd);
+
+	const cdrom_file::toc &persisted = reopened.get_toc();
+
+	REQUIRE(persisted.tracks[0].idx[2] == 4);
+	REQUIRE(persisted.tracks[0].idx[3] == 6);
+	REQUIRE(persisted.tracks[0].idx[4] == -1);
+
+	// Reconstructing again must not alter indexes that were persisted.
+	reopened.reconstruct_track_indexes();
+
+	REQUIRE(reopened.get_toc().tracks[0].idx[2] == 4);
+	REQUIRE(reopened.get_toc().tracks[0].idx[3] == 6);
+	REQUIRE(reopened.get_toc().tracks[0].idx[4] == -1);
+	
 	chd.close();
 	std::filesystem::remove_all(tempdir);
 }
