@@ -528,8 +528,6 @@ TEST_CASE("CD CHD reconstructs later-track index relative to stored pregap", "[u
 
 	cdrom_file cd(&chd);
 
-	cdrom_file cd(&chd);
-
 	const cdrom_file::toc &after = cd.get_toc();
 
 	REQUIRE(after.tracks[1].pregap == track2_pregap);
