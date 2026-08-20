@@ -1313,6 +1313,188 @@ TEST_CASE("CD-ROM Q TOC accumulator", "[util][cdrom]")
 	}
 }
 
+TEST_CASE("CD-ROM Q TOC accumulator updates canonical disc model", "[util][cdrom]")
+{
+	auto make_semantics = [] (
+			cdrom_file::q_toc_kind kind,
+			uint8_t point,
+			std::optional<uint8_t> track,
+			std::optional<uint32_t> start_frame)
+	{
+		cdrom_file::q_toc_semantics semantics;
+		semantics.adr_control = cdrom_file::CD_FLAG_ADR_START_TIME << 4;
+		semantics.kind = kind;
+		semantics.point = point;
+		semantics.track = track;
+		semantics.start_frame = start_frame;
+		semantics.disc_type =
+				(kind == cdrom_file::q_toc_kind::first_track)
+						? std::optional<uint8_t>(0x20)
+						: std::nullopt;
+		return semantics;
+	};
+
+	auto make_disc = [] ()
+	{
+		cdrom_file::disc disc;
+
+		cdrom_file::disc_session session;
+		session.number = 2;
+		session.first_track = 1;
+		session.last_track = 2;
+		session.program_start_frame = 900;
+		session.lead_in_start_frame = std::nullopt;
+		session.lead_out_start_frame = 4500;
+		disc.sessions.push_back(session);
+
+		cdrom_file::disc_track track3;
+		track3.number = 3;
+		track3.session = 2;
+		track3.type = cdrom_file::CD_TRACK_AUDIO;
+		track3.control_flags = 0;
+		track3.indexes.push_back({ 1, 900 });
+		track3.regions.push_back({
+				cdrom_file::region_kind::program,
+				900,
+				1000,
+				cdrom_file::region_presence::captured,
+				cdrom_file::region_presence::unknown });
+		disc.tracks.push_back(track3);
+
+		cdrom_file::disc_track track4;
+		track4.number = 4;
+		track4.session = 2;
+		track4.type = cdrom_file::CD_TRACK_AUDIO;
+		track4.control_flags = 0;
+		track4.indexes.push_back({ 1, 1900 });
+		track4.regions.push_back({
+				cdrom_file::region_kind::program,
+				1900,
+				1000,
+				cdrom_file::region_presence::captured,
+				cdrom_file::region_presence::unknown });
+		disc.tracks.push_back(track4);
+
+		return disc;
+	};
+
+	auto make_complete_accumulator = [&] ()
+	{
+		cdrom_file::q_toc_accumulator accumulator;
+
+		REQUIRE(cdrom_file::accumulate_q_toc_semantics(
+				make_semantics(
+						cdrom_file::q_toc_kind::first_track,
+						0xa0, 3, std::nullopt),
+				accumulator));
+
+		REQUIRE(cdrom_file::accumulate_q_toc_semantics(
+				make_semantics(
+						cdrom_file::q_toc_kind::last_track,
+						0xa1, 4, std::nullopt),
+				accumulator));
+
+		REQUIRE(cdrom_file::accumulate_q_toc_semantics(
+				make_semantics(
+						cdrom_file::q_toc_kind::lead_out,
+						0xa2, std::nullopt, 5000),
+				accumulator));
+
+		REQUIRE(cdrom_file::accumulate_q_toc_semantics(
+				make_semantics(
+						cdrom_file::q_toc_kind::track,
+						0x03, 3, 1000),
+				accumulator));
+
+		REQUIRE(cdrom_file::accumulate_q_toc_semantics(
+				make_semantics(
+						cdrom_file::q_toc_kind::track,
+						0x04, 4, 3000),
+				accumulator));
+
+		REQUIRE(accumulator.complete());
+
+		return accumulator;
+	};
+
+	SECTION("applies complete coherent TOC")
+	{
+		cdrom_file::disc disc = make_disc();
+		const auto accumulator = make_complete_accumulator();
+
+		REQUIRE(cdrom_file::apply_q_toc_accumulator(
+				accumulator, disc, 2));
+
+		REQUIRE(disc.sessions[0].first_track == 3);
+		REQUIRE(disc.sessions[0].last_track == 4);
+		REQUIRE(disc.sessions[0].program_start_frame == 1000);
+		REQUIRE(disc.sessions[0].lead_out_start_frame.has_value());
+		REQUIRE(*disc.sessions[0].lead_out_start_frame == 5000);
+
+		REQUIRE(disc.tracks[0].indexes[0].start_frame == 1000);
+		REQUIRE(disc.tracks[0].regions[0].start_frame == 1000);
+
+		REQUIRE(disc.tracks[1].indexes[0].start_frame == 3000);
+		REQUIRE(disc.tracks[1].regions[0].start_frame == 3000);
+	}
+
+	SECTION("rejects incomplete accumulator without mutation")
+	{
+		cdrom_file::disc disc = make_disc();
+		cdrom_file::q_toc_accumulator accumulator;
+
+		REQUIRE(cdrom_file::accumulate_q_toc_semantics(
+				make_semantics(
+						cdrom_file::q_toc_kind::first_track,
+						0xa0, 3, std::nullopt),
+				accumulator));
+
+		REQUIRE_FALSE(cdrom_file::apply_q_toc_accumulator(
+				accumulator, disc, 2));
+
+		REQUIRE(disc.sessions[0].first_track == 1);
+		REQUIRE(disc.sessions[0].last_track == 2);
+		REQUIRE(disc.sessions[0].program_start_frame == 900);
+		REQUIRE(*disc.sessions[0].lead_out_start_frame == 4500);
+	}
+
+	SECTION("rejects wrong session without mutation")
+	{
+		cdrom_file::disc disc = make_disc();
+		const auto accumulator = make_complete_accumulator();
+
+		REQUIRE_FALSE(cdrom_file::apply_q_toc_accumulator(
+				accumulator, disc, 1));
+
+		REQUIRE(disc.sessions[0].first_track == 1);
+		REQUIRE(disc.sessions[0].last_track == 2);
+		REQUIRE(disc.sessions[0].program_start_frame == 900);
+		REQUIRE(*disc.sessions[0].lead_out_start_frame == 4500);
+		REQUIRE(disc.tracks[0].indexes[0].start_frame == 900);
+		REQUIRE(disc.tracks[1].indexes[0].start_frame == 1900);
+	}
+
+	SECTION("failed application is atomic")
+	{
+		cdrom_file::disc disc = make_disc();
+		const auto accumulator = make_complete_accumulator();
+
+		// Make the accumulator structurally complete but make the target
+		// canonical model unable to accept track 4.
+		disc.tracks.pop_back();
+
+		REQUIRE_FALSE(cdrom_file::apply_q_toc_accumulator(
+				accumulator, disc, 2));
+
+		REQUIRE(disc.sessions[0].first_track == 1);
+		REQUIRE(disc.sessions[0].last_track == 2);
+		REQUIRE(disc.sessions[0].program_start_frame == 900);
+		REQUIRE(*disc.sessions[0].lead_out_start_frame == 4500);
+		REQUIRE(disc.tracks[0].indexes[0].start_frame == 900);
+		REQUIRE(disc.tracks[0].regions[0].start_frame == 900);
+	}
+}
+
 TEST_CASE("CD-ROM Q subchannel encode decode round trip", "[util][cdrom]")
 {
 	cdrom_file::q_position input;
