@@ -24,6 +24,7 @@
 #include "path.h"
 #include "strformat.h"
 
+#include <array>
 #include <cassert>
 #include <cstdlib>
 #include <cstring>
