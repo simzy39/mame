@@ -1114,8 +1114,6 @@ cdrom_file::disc cdrom_file::get_disc() const
 
 		result.tracks.push_back(std::move(track));
 	}
-	
-	return result;
 
 		const uint32_t session_count = cdtoc.numsessions ? cdtoc.numsessions : 1;
 
