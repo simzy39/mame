@@ -223,6 +223,15 @@ public:
 		uint32_t absolute_frame;
 	};
 
+struct q_toc
+{
+	uint8_t adr_control;
+	uint8_t point;
+	uint8_t minute;
+	uint8_t second;
+	uint8_t frame;
+};
+
 	cdrom_file(chd_file *chd);
 	cdrom_file(std::string_view inputfile);
 	~cdrom_file();
@@ -237,6 +246,7 @@ public:
 	static q_type classify_subcode_q(const uint8_t *q);	
 	static void encode_subcode_q(const q_position &position, uint8_t *buffer);
 	static bool decode_subcode_q(const uint8_t *q, q_position &position);
+	static bool decode_subcode_q_toc(const uint8_t *q, q_toc &toc);
 	static void pack_subcode_q(const uint8_t *q, uint8_t *subcode);
 	static void unpack_subcode_q(const uint8_t *subcode, uint8_t *q);
 	static bool make_subcode_q_position(
