@@ -1034,33 +1034,40 @@ TEST_CASE("CD-ROM Q TOC semantics update canonical disc model", "[util][cdrom]")
     track.session = 2;
     track.type = cdrom_file::CD_TRACK_AUDIO;
     track.control_flags = 0;
+	cdrom_file::region program;
+    program.kind = cdrom_file::region_kind::program;
+    program.start_frame = 1000;
+    program.frames = 500;
+    program.main_data = cdrom_file::region_presence::captured;
+    program.subcode = cdrom_file::region_presence::unknown;
+    track.regions.push_back(program);
     track.indexes.push_back({ 1, 1000 });
     disc.tracks.push_back(track);
 
-    SECTION("A0 updates first track")
+    SECTION("A0 confirms first track")
     {
         cdrom_file::q_toc_semantics semantics;
         semantics.adr_control = cdrom_file::CD_FLAG_ADR_START_TIME << 4;
         semantics.kind = cdrom_file::q_toc_kind::first_track;
         semantics.point = 0xa0;
-        semantics.track = 2;
+        semantics.track = 3;
         semantics.start_frame = std::nullopt;
         semantics.disc_type = 0x20;
 
         REQUIRE(cdrom_file::apply_q_toc_semantics(
                 semantics, disc, 2));
 
-        REQUIRE(disc.sessions[0].first_track == 2);
+        REQUIRE(disc.sessions[0].first_track == 3);
         REQUIRE(disc.sessions[0].last_track == 4);
     }
 
-    SECTION("A1 updates last track")
+    SECTION("A1 confirms last track")
     {
         cdrom_file::q_toc_semantics semantics;
         semantics.adr_control = cdrom_file::CD_FLAG_ADR_START_TIME << 4;
         semantics.kind = cdrom_file::q_toc_kind::last_track;
         semantics.point = 0xa1;
-        semantics.track = 7;
+        semantics.track = 4;
         semantics.start_frame = std::nullopt;
         semantics.disc_type = std::nullopt;
 
@@ -1068,7 +1075,7 @@ TEST_CASE("CD-ROM Q TOC semantics update canonical disc model", "[util][cdrom]")
                 semantics, disc, 2));
 
         REQUIRE(disc.sessions[0].first_track == 3);
-        REQUIRE(disc.sessions[0].last_track == 7);
+        REQUIRE(disc.sessions[0].last_track == 4);
     }
 
     SECTION("A2 updates lead-out")
@@ -1104,6 +1111,8 @@ TEST_CASE("CD-ROM Q TOC semantics update canonical disc model", "[util][cdrom]")
         REQUIRE(disc.tracks[0].indexes.size() == 1);
         REQUIRE(disc.tracks[0].indexes[0].number == 1);
         REQUIRE(disc.tracks[0].indexes[0].start_frame == 2345);
+		REQUIRE(disc.tracks[0].regions[0].start_frame == 2345);
+        REQUIRE(disc.sessions[0].program_start_frame == 2345);
     }
 
     SECTION("track point can create missing INDEX 01")
@@ -1124,6 +1133,8 @@ TEST_CASE("CD-ROM Q TOC semantics update canonical disc model", "[util][cdrom]")
         REQUIRE(disc.tracks[0].indexes.size() == 1);
         REQUIRE(disc.tracks[0].indexes[0].number == 1);
         REQUIRE(disc.tracks[0].indexes[0].start_frame == 2345);
+		REQUIRE(disc.tracks[0].regions[0].start_frame == 2345);
+        REQUIRE(disc.sessions[0].program_start_frame == 2345);
     }
 
     SECTION("special point does not alter canonical model")
