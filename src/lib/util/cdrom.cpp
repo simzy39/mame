@@ -1042,6 +1042,81 @@ uint32_t cdrom_file::get_track_index(uint32_t frame) const
 	return get_track_index(trackinfo, frame - track_start);
 }
 
+cdrom_file::disc cdrom_file::get_disc() const
+{
+	disc result;
+
+	result.tracks.reserve(cdtoc.numtrks);
+
+	for (uint32_t tracknum = 0; tracknum < cdtoc.numtrks; tracknum++)
+	{
+		const track_info &source = cdtoc.tracks[tracknum];
+
+		disc_track track;
+		track.number = tracknum + 1;
+		track.session = source.session + 1;
+		track.type = source.trktype;
+		track.control_flags = source.control_flags;
+
+		if (source.pregap)
+		{
+			region pregap;
+			pregap.kind = region_kind::pregap;
+			pregap.start = -int32_t(source.pregap);
+			pregap.frames = source.pregap;
+			pregap.main_data =
+					source.pgdatasize
+						? region_presence::captured
+						: region_presence::unknown;
+			pregap.subcode =
+					source.pgsubsize
+						? region_presence::captured
+						: region_presence::unknown;
+
+			track.regions.push_back(pregap);
+		}
+
+		region program;
+		program.kind = region_kind::program;
+		program.start = 0;
+		program.frames = source.frames - source.pregap;
+		program.main_data = region_presence::captured;
+		program.subcode =
+				source.subsize
+					? region_presence::captured
+					: region_presence::unknown;
+
+		track.regions.push_back(program);
+
+		if (source.postgap)
+		{
+			region postgap;
+			postgap.kind = region_kind::postgap;
+			postgap.start = int32_t(program.frames);
+			postgap.frames = source.postgap;
+			postgap.main_data = region_presence::unknown;
+			postgap.subcode = region_presence::unknown;
+
+			track.regions.push_back(postgap);
+		}
+
+		track.indexes.push_back({ 1, 0 });
+
+		for (uint32_t indexnum = 2; indexnum <= MAX_INDEX; indexnum++)
+		{
+			if (source.idx[indexnum] >= 0)
+			{
+				track.indexes.push_back(
+						{ uint8_t(indexnum), source.idx[indexnum] });
+			}
+		}
+
+		result.tracks.push_back(std::move(track));
+	}
+
+	return result;
+}
+
 void cdrom_file::reconstruct_track_indexes()
 {
 	if (chd == nullptr)
