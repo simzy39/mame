@@ -252,6 +252,18 @@ public:
 		std::optional<uint8_t> disc_type;
 	};
 
+	struct q_toc_accumulator
+	{
+		std::optional<uint8_t> first_track;
+		std::optional<uint8_t> last_track;
+		std::optional<uint32_t> lead_out_start_frame;
+		std::optional<uint8_t> disc_type;
+		std::vector<q_toc_semantics> tracks;
+		bool conflict = false;
+
+		bool complete() const;
+	};
+
 	cdrom_file(chd_file *chd);
 	cdrom_file(std::string_view inputfile);
 	~cdrom_file();
@@ -270,6 +282,13 @@ public:
 	static bool interpret_subcode_q_toc(
 			const q_toc &toc,
 			q_toc_semantics &semantics);
+	static bool accumulate_q_toc_semantics(
+			const q_toc_semantics &semantics,
+			q_toc_accumulator &accumulator);
+	static bool apply_q_toc_accumulator(
+			const q_toc_accumulator &accumulator,
+			disc &disc,
+			uint8_t session_number);
 	static bool apply_q_toc_semantics(
     	    const q_toc_semantics &semantics,
         	disc &disc,
