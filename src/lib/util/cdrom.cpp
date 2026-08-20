@@ -652,6 +652,37 @@ static uint16_t calculate_q_crc(const uint8_t *data)
 	return ~crc;
 }
 
+cdrom_file::q_type cdrom_file::classify_subcode_q(const uint8_t *q)
+{
+	const uint16_t crc = calculate_q_crc(q);
+
+	if (q[10] != (crc >> 8) || q[11] != (crc & 0xff))
+		return q_type::invalid;
+
+	const uint8_t adr = q[0] & 0x0f;
+
+	switch (adr)
+	{
+	case CD_FLAG_ADR_START_TIME:
+		// ADR=1 uses track 00 in the lead-in TOC and AA in the lead-out.
+		if (q[1] == 0x00)
+			return q_type::lead_in_toc;
+
+		if (q[1] == 0xaa)
+			return q_type::lead_out;
+
+		return q_type::position;
+
+	case CD_FLAG_ADR_CATALOG_CODE:
+		return q_type::catalog;
+
+	case CD_FLAG_ADR_ISRC_CODE:
+		return q_type::isrc;
+
+	default:
+		return q_type::unknown;
+	}
+}
 
 void cdrom_file::encode_subcode_q(const q_position &position, uint8_t *q)
 {
@@ -681,13 +712,7 @@ void cdrom_file::encode_subcode_q(const q_position &position, uint8_t *q)
 
 bool cdrom_file::decode_subcode_q(const uint8_t *q, q_position &position)
 {
-	// Only ADR=1 carries track/index position information.
-	if ((q[0] & 0x0f) != CD_FLAG_ADR_START_TIME)
-		return false;
-
-	// Reject Q frames with an invalid CRC.
-	const uint16_t crc = calculate_q_crc(q);
-	if (q[10] != (crc >> 8) || q[11] != (crc & 0xff))
+	if (classify_subcode_q(q) != q_type::position)
 		return false;
 
 	// ADR=1 position Q reserves this byte as zero.
