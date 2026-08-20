@@ -17,6 +17,7 @@
 #include "osdcore.h"
 
 #include <algorithm>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -123,8 +124,21 @@ public:
 		std::vector<region> regions;
 	};
 
+	struct disc_session
+	{
+		uint8_t number;
+		uint8_t first_track;
+		uint8_t last_track;
+
+		int32_t program_start;
+
+		std::optional<int32_t> lead_in_start;
+		std::optional<int32_t> lead_out_start;
+	};
+
 	struct disc
 	{
+		std::vector<disc_session> sessions;
 		std::vector<disc_track> tracks;
 	};
 
