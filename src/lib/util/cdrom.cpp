@@ -1064,7 +1064,8 @@ cdrom_file::disc cdrom_file::get_disc() const
 		{
 			region pregap;
 			pregap.kind = region_kind::pregap;
-			pregap.start = -int32_t(source.pregap);
+			pregap.start_frame =
+			int32_t(source.logframeofs) - int32_t(source.pregap);
 			pregap.frames = source.pregap;
 			pregap.main_data =
 					source.pgdatasize
@@ -1080,7 +1081,7 @@ cdrom_file::disc cdrom_file::get_disc() const
 
 		region program;
 		program.kind = region_kind::program;
-		program.start = 0;
+		program.start_frame = source.logframeofs;
 		program.frames = source.frames - source.pregap;
 		program.main_data = region_presence::captured;
 		program.subcode =
@@ -1094,7 +1095,8 @@ cdrom_file::disc cdrom_file::get_disc() const
 		{
 			region postgap;
 			postgap.kind = region_kind::postgap;
-			postgap.start = int32_t(program.frames);
+			postgap.start_frame =
+			int32_t(source.logframeofs) + int32_t(program.frames);
 			postgap.frames = source.postgap;
 			postgap.main_data = region_presence::unknown;
 			postgap.subcode = region_presence::unknown;
@@ -1102,15 +1104,19 @@ cdrom_file::disc cdrom_file::get_disc() const
 			track.regions.push_back(postgap);
 		}
 
-		track.indexes.push_back({ 1, 0 });
+		track.indexes.push_back(
+				{ 1, int32_t(source.logframeofs) });
 
 		for (uint32_t indexnum = 2; indexnum <= MAX_INDEX; indexnum++)
 		{
 			if (source.idx[indexnum] >= 0)
-			{
-				track.indexes.push_back(
-						{ uint8_t(indexnum), source.idx[indexnum] });
-			}
+		{
+			track.indexes.push_back(
+				{
+					uint8_t(indexnum),
+					int32_t(source.logframeofs) + source.idx[indexnum]
+				});
+		}
 		}
 
 		result.tracks.push_back(std::move(track));
@@ -1141,13 +1147,14 @@ cdrom_file::disc cdrom_file::get_disc() const
 		session.number = sessionnum + 1;
 		session.first_track = first_track + 1;
 		session.last_track = last_track + 1;
-		session.program_start = cdtoc.tracks[first_track].logframeofs;
+		session.program_start_frame =
+			cdtoc.tracks[first_track].logframeofs;
 
 		// The legacy TOC does not reliably retain actual session
 		// lead-in and lead-out positions.  Keep them unknown rather
 		// than reproducing assumptions made by individual drive layers.
-		session.lead_in_start = std::nullopt;
-		session.lead_out_start = std::nullopt;
+		session.lead_in_start_frame = std::nullopt;
+		session.lead_out_start_frame = std::nullopt;
 
 		result.sessions.push_back(std::move(session));
 	}
