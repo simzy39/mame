@@ -232,6 +232,26 @@ struct q_toc
 	uint8_t frame;
 };
 
+	enum class q_toc_kind
+	{
+		track,
+		first_track,
+		last_track,
+		lead_out,
+		special
+	};
+
+	struct q_toc_semantics
+	{
+		uint8_t adr_control;
+		q_toc_kind kind;
+		uint8_t point;
+
+		std::optional<uint8_t> track;
+		std::optional<uint32_t> start_frame;
+		std::optional<uint8_t> disc_type;
+	};
+
 	cdrom_file(chd_file *chd);
 	cdrom_file(std::string_view inputfile);
 	~cdrom_file();
@@ -247,6 +267,9 @@ struct q_toc
 	static void encode_subcode_q(const q_position &position, uint8_t *buffer);
 	static bool decode_subcode_q(const uint8_t *q, q_position &position);
 	static bool decode_subcode_q_toc(const uint8_t *q, q_toc &toc);
+	static bool interpret_subcode_q_toc(
+			const q_toc &toc,
+			q_toc_semantics &semantics);
 	static void pack_subcode_q(const uint8_t *q, uint8_t *subcode);
 	static void unpack_subcode_q(const uint8_t *subcode, uint8_t *q);
 	static bool make_subcode_q_position(
