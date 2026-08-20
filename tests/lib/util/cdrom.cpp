@@ -1172,6 +1172,147 @@ TEST_CASE("CD-ROM Q TOC semantics update canonical disc model", "[util][cdrom]")
     }
 }
 
+TEST_CASE("CD-ROM Q TOC accumulator", "[util][cdrom]")
+{
+	cdrom_file::q_toc_accumulator accumulator;
+
+	auto make_first_track = [] (uint8_t track)
+	{
+		cdrom_file::q_toc_semantics semantics;
+		semantics.adr_control = cdrom_file::CD_FLAG_ADR_START_TIME << 4;
+		semantics.kind = cdrom_file::q_toc_kind::first_track;
+		semantics.point = 0xa0;
+		semantics.track = track;
+		semantics.start_frame = std::nullopt;
+		semantics.disc_type = 0x20;
+		return semantics;
+	};
+
+	auto make_last_track = [] (uint8_t track)
+	{
+		cdrom_file::q_toc_semantics semantics;
+		semantics.adr_control = cdrom_file::CD_FLAG_ADR_START_TIME << 4;
+		semantics.kind = cdrom_file::q_toc_kind::last_track;
+		semantics.point = 0xa1;
+		semantics.track = track;
+		semantics.start_frame = std::nullopt;
+		semantics.disc_type = std::nullopt;
+		return semantics;
+	};
+
+	auto make_lead_out = [] (uint32_t frame)
+	{
+		cdrom_file::q_toc_semantics semantics;
+		semantics.adr_control = cdrom_file::CD_FLAG_ADR_START_TIME << 4;
+		semantics.kind = cdrom_file::q_toc_kind::lead_out;
+		semantics.point = 0xa2;
+		semantics.track = std::nullopt;
+		semantics.start_frame = frame;
+		semantics.disc_type = std::nullopt;
+		return semantics;
+	};
+
+	auto make_track = [] (uint8_t track, uint32_t frame)
+	{
+		cdrom_file::q_toc_semantics semantics;
+		semantics.adr_control = cdrom_file::CD_FLAG_ADR_START_TIME << 4;
+		semantics.kind = cdrom_file::q_toc_kind::track;
+		semantics.point = track;
+		semantics.track = track;
+		semantics.start_frame = frame;
+		semantics.disc_type = std::nullopt;
+		return semantics;
+	};
+
+	SECTION("collects a complete TOC")
+	{
+		REQUIRE(cdrom_file::accumulate_q_toc_semantics(
+				make_first_track(3), accumulator));
+		REQUIRE(cdrom_file::accumulate_q_toc_semantics(
+				make_last_track(4), accumulator));
+		REQUIRE(cdrom_file::accumulate_q_toc_semantics(
+				make_lead_out(5000), accumulator));
+
+		REQUIRE_FALSE(accumulator.complete());
+
+		REQUIRE(cdrom_file::accumulate_q_toc_semantics(
+				make_track(3, 1000), accumulator));
+
+		REQUIRE_FALSE(accumulator.complete());
+
+		REQUIRE(cdrom_file::accumulate_q_toc_semantics(
+				make_track(4, 3000), accumulator));
+
+		REQUIRE(accumulator.complete());
+		REQUIRE_FALSE(accumulator.conflict);
+		REQUIRE(accumulator.tracks.size() == 2);
+	}
+
+	SECTION("accepts repeated identical observations")
+	{
+		const auto first = make_first_track(3);
+		const auto track = make_track(3, 1000);
+
+		REQUIRE(cdrom_file::accumulate_q_toc_semantics(
+				first, accumulator));
+		REQUIRE(cdrom_file::accumulate_q_toc_semantics(
+				first, accumulator));
+
+		REQUIRE(cdrom_file::accumulate_q_toc_semantics(
+				track, accumulator));
+		REQUIRE(cdrom_file::accumulate_q_toc_semantics(
+				track, accumulator));
+
+		REQUIRE_FALSE(accumulator.conflict);
+		REQUIRE(accumulator.tracks.size() == 1);
+	}
+
+	SECTION("rejects conflicting session observations")
+	{
+		REQUIRE(cdrom_file::accumulate_q_toc_semantics(
+				make_first_track(3), accumulator));
+
+		REQUIRE_FALSE(cdrom_file::accumulate_q_toc_semantics(
+				make_first_track(4), accumulator));
+
+		REQUIRE(accumulator.conflict);
+		REQUIRE_FALSE(accumulator.complete());
+	}
+
+	SECTION("rejects conflicting track observations")
+	{
+		REQUIRE(cdrom_file::accumulate_q_toc_semantics(
+				make_track(3, 1000), accumulator));
+
+		REQUIRE_FALSE(cdrom_file::accumulate_q_toc_semantics(
+				make_track(3, 1001), accumulator));
+
+		REQUIRE(accumulator.conflict);
+		REQUIRE_FALSE(accumulator.complete());
+	}
+
+	SECTION("requires every track point")
+	{
+		REQUIRE(cdrom_file::accumulate_q_toc_semantics(
+				make_first_track(3), accumulator));
+		REQUIRE(cdrom_file::accumulate_q_toc_semantics(
+				make_last_track(5), accumulator));
+		REQUIRE(cdrom_file::accumulate_q_toc_semantics(
+				make_lead_out(6000), accumulator));
+		REQUIRE(cdrom_file::accumulate_q_toc_semantics(
+				make_track(3, 1000), accumulator));
+		REQUIRE(cdrom_file::accumulate_q_toc_semantics(
+				make_track(5, 4000), accumulator));
+
+		REQUIRE_FALSE(accumulator.complete());
+
+		REQUIRE(cdrom_file::accumulate_q_toc_semantics(
+				make_track(4, 2500), accumulator));
+
+		REQUIRE(accumulator.complete());
+	}
+}
+
 TEST_CASE("CD-ROM Q subchannel encode decode round trip", "[util][cdrom]")
 {
 	cdrom_file::q_position input;
