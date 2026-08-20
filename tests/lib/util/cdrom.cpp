@@ -504,7 +504,8 @@ TEST_CASE("CD-ROM canonical disc model distinguishes virtual and stored pregaps"
 		const auto &pregap = disc.tracks[0].regions[0];
 
 		REQUIRE(pregap.kind == cdrom_file::region_kind::pregap);
-		REQUIRE(pregap.frames == 150);
+		REQUIRE(pregap.frames.has_value());
+		REQUIRE(*pregap.frames == 150);
 		REQUIRE(pregap.main_data == cdrom_file::region_presence::captured);
 		REQUIRE(pregap.start_frame == 0);
 
@@ -528,7 +529,8 @@ TEST_CASE("CD-ROM canonical disc model distinguishes virtual and stored pregaps"
 		const auto &pregap = disc.tracks[0].regions[0];
 
 		REQUIRE(pregap.kind == cdrom_file::region_kind::pregap);
-		REQUIRE(pregap.frames == 150);
+		REQUIRE(pregap.frames.has_value());
+		REQUIRE(*pregap.frames == 150);
 		REQUIRE(pregap.main_data == cdrom_file::region_presence::unknown);
 		REQUIRE(pregap.start_frame == 0);
 
@@ -1026,8 +1028,8 @@ TEST_CASE("CD-ROM Q TOC semantics update canonical disc model", "[util][cdrom]")
     session.first_track = 3;
     session.last_track = 4;
     session.program_start_frame = 1000;
-    session.lead_in_start_frame = std::nullopt;
-    session.lead_out_start_frame = std::nullopt;
+    session.lead_in = std::nullopt;
+	session.lead_out = std::nullopt;
     disc.sessions.push_back(session);
 
     cdrom_file::disc_track track;
@@ -1092,8 +1094,18 @@ TEST_CASE("CD-ROM Q TOC semantics update canonical disc model", "[util][cdrom]")
         REQUIRE(cdrom_file::apply_q_toc_semantics(
                 semantics, disc, 2));
 
-        REQUIRE(disc.sessions[0].lead_out_start_frame.has_value());
-        REQUIRE(*disc.sessions[0].lead_out_start_frame == 12345);
+        REQUIRE(disc.sessions[0].lead_out.has_value());
+		REQUIRE(
+       			disc.sessions[0].lead_out->kind
+            		== cdrom_file::region_kind::lead_out);
+		REQUIRE(disc.sessions[0].lead_out->start_frame == 12345);
+		REQUIRE_FALSE(disc.sessions[0].lead_out->frames.has_value());
+		REQUIRE(
+      		  	disc.sessions[0].lead_out->main_data
+           			== cdrom_file::region_presence::unknown);
+		REQUIRE(
+       		 	disc.sessions[0].lead_out->subcode
+           		 	== cdrom_file::region_presence::unknown);
     }
 
     SECTION("track point updates INDEX 01")
@@ -1483,8 +1495,13 @@ TEST_CASE("CD-ROM Q TOC accumulator updates canonical disc model", "[util][cdrom
 		session.first_track = 1;
 		session.last_track = 2;
 		session.program_start_frame = 900;
-		session.lead_in_start_frame = std::nullopt;
-		session.lead_out_start_frame = 4500;
+		session.lead_in = std::nullopt;
+		session.lead_out = cdrom_file::region{
+        		cdrom_file::region_kind::lead_out,
+        		4500,
+        		750,
+        		cdrom_file::region_presence::generated,
+        		cdrom_file::region_presence::captured };
 		disc.sessions.push_back(session);
 
 		cdrom_file::disc_track track3;
@@ -1568,8 +1585,16 @@ TEST_CASE("CD-ROM Q TOC accumulator updates canonical disc model", "[util][cdrom
 		REQUIRE(disc.sessions[0].first_track == 3);
 		REQUIRE(disc.sessions[0].last_track == 4);
 		REQUIRE(disc.sessions[0].program_start_frame == 1000);
-		REQUIRE(disc.sessions[0].lead_out_start_frame.has_value());
-		REQUIRE(*disc.sessions[0].lead_out_start_frame == 5000);
+		REQUIRE(disc.sessions[0].lead_out.has_value());
+		REQUIRE(disc.sessions[0].lead_out->start_frame == 5000);
+		REQUIRE(disc.sessions[0].lead_out->frames.has_value());
+		REQUIRE(*disc.sessions[0].lead_out->frames == 750);
+		REQUIRE(
+      			disc.sessions[0].lead_out->main_data
+            		== cdrom_file::region_presence::generated);
+		REQUIRE(
+        		disc.sessions[0].lead_out->subcode
+         			== cdrom_file::region_presence::captured);
 
 		REQUIRE(disc.tracks[0].indexes[0].start_frame == 1000);
 		REQUIRE(disc.tracks[0].regions[0].start_frame == 1000);
@@ -1595,7 +1620,10 @@ TEST_CASE("CD-ROM Q TOC accumulator updates canonical disc model", "[util][cdrom
 		REQUIRE(disc.sessions[0].first_track == 1);
 		REQUIRE(disc.sessions[0].last_track == 2);
 		REQUIRE(disc.sessions[0].program_start_frame == 900);
-		REQUIRE(*disc.sessions[0].lead_out_start_frame == 4500);
+		REQUIRE(disc.sessions[0].lead_out.has_value());
+		REQUIRE(disc.sessions[0].lead_out->start_frame == 4500);
+		REQUIRE(disc.sessions[0].lead_out->frames.has_value());
+		REQUIRE(*disc.sessions[0].lead_out->frames == 750);
 	}
 
 	SECTION("rejects wrong session without mutation")
@@ -1609,7 +1637,10 @@ TEST_CASE("CD-ROM Q TOC accumulator updates canonical disc model", "[util][cdrom
 		REQUIRE(disc.sessions[0].first_track == 1);
 		REQUIRE(disc.sessions[0].last_track == 2);
 		REQUIRE(disc.sessions[0].program_start_frame == 900);
-		REQUIRE(*disc.sessions[0].lead_out_start_frame == 4500);
+		REQUIRE(disc.sessions[0].lead_out.has_value());
+		REQUIRE(disc.sessions[0].lead_out->start_frame == 4500);
+		REQUIRE(disc.sessions[0].lead_out->frames.has_value());
+		REQUIRE(*disc.sessions[0].lead_out->frames == 750);
 		REQUIRE(disc.tracks[0].indexes[0].start_frame == 900);
 		REQUIRE(disc.tracks[1].indexes[0].start_frame == 1900);
 	}
@@ -1629,7 +1660,10 @@ TEST_CASE("CD-ROM Q TOC accumulator updates canonical disc model", "[util][cdrom
 		REQUIRE(disc.sessions[0].first_track == 1);
 		REQUIRE(disc.sessions[0].last_track == 2);
 		REQUIRE(disc.sessions[0].program_start_frame == 900);
-		REQUIRE(*disc.sessions[0].lead_out_start_frame == 4500);
+		REQUIRE(disc.sessions[0].lead_out.has_value());
+		REQUIRE(disc.sessions[0].lead_out->start_frame == 4500);
+		REQUIRE(disc.sessions[0].lead_out->frames.has_value());
+		REQUIRE(*disc.sessions[0].lead_out->frames == 750);
 		REQUIRE(disc.tracks[0].indexes[0].start_frame == 900);
 		REQUIRE(disc.tracks[0].regions[0].start_frame == 900);
 	}
