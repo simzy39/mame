@@ -1540,12 +1540,65 @@ std::error_condition cdrom_file::parse_metadata(chd_file *chd, toc &toc)
 {
 	std::string metadata;
 	std::error_condition err;
-	uint32_t sessionnum = 1;
 
 	/* clear structures */
 	reset_toc(toc);
 
 	toc.numsessions = 1;
+
+	std::array<uint32_t, MAX_TRACKS> track_sessions{};
+	track_sessions.fill(1);
+
+	uint32_t sessionnum = 1;
+	uint32_t session_track = 0;
+
+	for (uint32_t metaindex = 0; ; metaindex++)
+	{
+		std::vector<uint8_t> rawmetadata;
+		chd_metadata_tag metatag;
+		uint8_t metaflags;
+
+		err = chd->read_metadata(
+				CHDMETATAG_WILDCARD,
+				metaindex,
+				rawmetadata,
+				metatag,
+				metaflags);
+
+		if (err == chd_file::error::METADATA_NOT_FOUND)
+			break;
+
+		if (err)
+			return err;
+
+		if (metatag == CDROM_SESSION_METADATA_TAG)
+		{
+			const std::string session_metadata(
+					reinterpret_cast<const char *>(rawmetadata.data()),
+					rawmetadata.size());
+
+			if (sscanf(
+					session_metadata.c_str(),
+					CDROM_SESSION_METADATA_FORMAT,
+					&sessionnum) != 1)
+			{
+				return chd_file::error::INVALID_DATA;
+			}
+
+			if (sessionnum == 0)
+				return chd_file::error::INVALID_DATA;
+
+			toc.numsessions = std::max(toc.numsessions, sessionnum);
+		}
+		else if (metatag == CDROM_TRACK_METADATA_TAG
+				|| metatag == CDROM_TRACK_METADATA2_TAG
+				|| metatag == GDROM_OLD_METADATA_TAG
+				|| metatag == GDROM_TRACK_METADATA_TAG)
+		{
+			if (session_track < MAX_TRACKS)
+				track_sessions[session_track++] = sessionnum;
+		}
+	}
 
 	/* start with no tracks */
 	for (toc.numtrks = 0; toc.numtrks < MAX_TRACKS; toc.numtrks++)
@@ -1560,13 +1613,6 @@ std::error_condition cdrom_file::parse_metadata(chd_file *chd, toc &toc)
 		std::fill(std::begin(subtype), std::end(subtype), 0);
 		std::fill(std::begin(pgtype), std::end(pgtype), 0);
 		std::fill(std::begin(pgsub), std::end(pgsub), 0);
-
-		// fetch the session metadata first
-		if (!chd->read_metadata(CDROM_SESSION_METADATA_TAG, toc.numtrks, metadata))
-		{
-			if (sscanf(metadata.c_str(), CDROM_SESSION_METADATA_FORMAT, &sessionnum) != 1)
-				return chd_file::error::INVALID_DATA;
-		}	
 
 		// fetch the metadata for this track
 		if (!chd->read_metadata(CDROM_TRACK_METADATA_TAG, toc.numtrks, metadata))
@@ -1609,7 +1655,7 @@ std::error_condition cdrom_file::parse_metadata(chd_file *chd, toc &toc)
 		if (track->datasize == 0)
 			return chd_file::error::INVALID_DATA;
 
-		track->session = sessionnum - 1;
+		track->session = track_sessions[toc.numtrks] - 1;
 		// extract the subtype and determine the subcode data size
 		track->subtype = CD_SUB_NONE;
 		track->subsize = 0;
@@ -1640,8 +1686,6 @@ std::error_condition cdrom_file::parse_metadata(chd_file *chd, toc &toc)
 		/* set the postgap info */
 		track->postgap = postgap;
 	}
-
-	toc.numsessions = sessionnum;
 
 	if (toc.numsessions > 1)
 		toc.flags |= CD_FLAG_MULTISESSION;
