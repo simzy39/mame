@@ -895,6 +895,127 @@ TEST_CASE("CD-ROM Q subchannel lead-in TOC decode", "[util][cdrom]")
 	}
 }
 
+TEST_CASE("CD-ROM Q subchannel lead-in TOC semantics", "[util][cdrom]")
+{
+	SECTION("A0 identifies first track and disc type")
+	{
+		cdrom_file::q_toc toc;
+		toc.adr_control = cdrom_file::CD_FLAG_ADR_START_TIME << 4;
+		toc.point = 0xa0;
+		toc.minute = 2;
+		toc.second = 20;
+		toc.frame = 0;
+
+		cdrom_file::q_toc_semantics semantics;
+
+		REQUIRE(cdrom_file::interpret_subcode_q_toc(toc, semantics));
+
+		REQUIRE(semantics.kind == cdrom_file::q_toc_kind::first_track);
+		REQUIRE(semantics.track.has_value());
+		REQUIRE(*semantics.track == 2);
+		REQUIRE(semantics.disc_type.has_value());
+		REQUIRE(*semantics.disc_type == 0x20);
+		REQUIRE_FALSE(semantics.start_frame.has_value());
+	}
+
+	SECTION("A1 identifies last track")
+	{
+		cdrom_file::q_toc toc;
+		toc.adr_control = cdrom_file::CD_FLAG_ADR_START_TIME << 4;
+		toc.point = 0xa1;
+		toc.minute = 12;
+		toc.second = 0;
+		toc.frame = 0;
+
+		cdrom_file::q_toc_semantics semantics;
+
+		REQUIRE(cdrom_file::interpret_subcode_q_toc(toc, semantics));
+
+		REQUIRE(semantics.kind == cdrom_file::q_toc_kind::last_track);
+		REQUIRE(semantics.track.has_value());
+		REQUIRE(*semantics.track == 12);
+		REQUIRE_FALSE(semantics.start_frame.has_value());
+		REQUIRE_FALSE(semantics.disc_type.has_value());
+	}
+
+	SECTION("A2 identifies lead-out position")
+	{
+		cdrom_file::q_toc toc;
+		toc.adr_control = cdrom_file::CD_FLAG_ADR_START_TIME << 4;
+		toc.point = 0xa2;
+		toc.minute = 42;
+		toc.second = 17;
+		toc.frame = 23;
+
+		cdrom_file::q_toc_semantics semantics;
+
+		REQUIRE(cdrom_file::interpret_subcode_q_toc(toc, semantics));
+
+		REQUIRE(semantics.kind == cdrom_file::q_toc_kind::lead_out);
+		REQUIRE_FALSE(semantics.track.has_value());
+		REQUIRE(semantics.start_frame.has_value());
+		REQUIRE(
+				*semantics.start_frame
+					== (42U * 60U * 75U) + (17U * 75U) + 23U);
+	}
+
+	SECTION("track point identifies track start")
+	{
+		cdrom_file::q_toc toc;
+		toc.adr_control = cdrom_file::CD_FLAG_ADR_START_TIME << 4;
+		toc.point = 0x03;
+		toc.minute = 12;
+		toc.second = 34;
+		toc.frame = 56;
+
+		cdrom_file::q_toc_semantics semantics;
+
+		REQUIRE(cdrom_file::interpret_subcode_q_toc(toc, semantics));
+
+		REQUIRE(semantics.kind == cdrom_file::q_toc_kind::track);
+		REQUIRE(semantics.track.has_value());
+		REQUIRE(*semantics.track == 3);
+		REQUIRE(semantics.start_frame.has_value());
+		REQUIRE(
+				*semantics.start_frame
+					== (12U * 60U * 75U) + (34U * 75U) + 56U);
+	}
+
+	SECTION("non-track special point is preserved")
+	{
+		cdrom_file::q_toc toc;
+		toc.adr_control = cdrom_file::CD_FLAG_ADR_START_TIME << 4;
+		toc.point = 0xb0;
+		toc.minute = 0;
+		toc.second = 0;
+		toc.frame = 0;
+
+		cdrom_file::q_toc_semantics semantics;
+
+		REQUIRE(cdrom_file::interpret_subcode_q_toc(toc, semantics));
+
+		REQUIRE(semantics.kind == cdrom_file::q_toc_kind::special);
+		REQUIRE(semantics.point == 0xb0);
+		REQUIRE_FALSE(semantics.track.has_value());
+		REQUIRE_FALSE(semantics.start_frame.has_value());
+	}
+
+	SECTION("invalid A1 is rejected")
+	{
+		cdrom_file::q_toc toc;
+		toc.adr_control = cdrom_file::CD_FLAG_ADR_START_TIME << 4;
+		toc.point = 0xa1;
+		toc.minute = 12;
+		toc.second = 1;
+		toc.frame = 0;
+
+		cdrom_file::q_toc_semantics semantics;
+
+		REQUIRE_FALSE(
+				cdrom_file::interpret_subcode_q_toc(toc, semantics));
+	}
+}
+
 TEST_CASE("CD-ROM Q subchannel encode decode round trip", "[util][cdrom]")
 {
 	cdrom_file::q_position input;
