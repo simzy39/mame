@@ -940,16 +940,32 @@ bool cdrom_file::apply_q_toc_semantics(
                         return entry.number == 1;
                     });
 
+                        const int32_t start_frame =
+                    int32_t(*semantics.start_frame);
+
             if (index_it == track_it->indexes.end())
             {
                 track_it->indexes.push_back(
-                        { 1, int32_t(*semantics.start_frame) });
+                        { 1, start_frame });
             }
             else
             {
-                index_it->start_frame =
-                        int32_t(*semantics.start_frame);
+                index_it->start_frame = start_frame;
             }
+
+            auto program_it = std::find_if(
+                    track_it->regions.begin(),
+                    track_it->regions.end(),
+                    [](const region &entry)
+                    {
+                        return entry.kind == region_kind::program;
+                    });
+
+            if (program_it != track_it->regions.end())
+                program_it->start_frame = start_frame;
+
+            if (session_it->first_track == track_it->number)
+                session_it->program_start_frame = start_frame;
 
             return true;
         }
