@@ -622,6 +622,134 @@ TEST_CASE("CD-ROM Q subchannel later-track stored pregap", "[util][cdrom]")
 	std::filesystem::remove_all(tempdir);
 }
 
+TEST_CASE("CD-ROM Q subchannel packet classification", "[util][cdrom]")
+{
+	auto update_crc = [] (uint8_t *q)
+	{
+		const uint16_t crc = reference_q_crc(q);
+		q[10] = uint8_t(crc >> 8);
+		q[11] = uint8_t(crc);
+	};
+
+	SECTION("program-area position")
+	{
+		cdrom_file::q_position position;
+		position.adr_control = cdrom_file::CD_FLAG_ADR_START_TIME << 4;
+		position.track = 1;
+		position.index = 1;
+		position.relative_frame = 0;
+		position.absolute_frame = 150;
+
+		uint8_t q[12];
+		cdrom_file::encode_subcode_q(position, q);
+
+		REQUIRE(
+				cdrom_file::classify_subcode_q(q)
+					== cdrom_file::q_type::position);
+	}
+
+	SECTION("lead-in TOC")
+	{
+		uint8_t q[12] =
+		{
+			0x01,
+			0x00,
+			0xa0,
+			0x00, 0x00, 0x00,
+			0x00,
+			0x01, 0x00, 0x00,
+			0x00, 0x00
+		};
+
+		update_crc(q);
+
+		REQUIRE(
+				cdrom_file::classify_subcode_q(q)
+					== cdrom_file::q_type::lead_in_toc);
+
+		cdrom_file::q_position position;
+		REQUIRE_FALSE(cdrom_file::decode_subcode_q(q, position));
+	}
+
+	SECTION("lead-out")
+	{
+		uint8_t q[12] =
+		{
+			0x01,
+			0xaa,
+			0x01,
+			0x00, 0x00, 0x00,
+			0x00,
+			0x10, 0x00, 0x00,
+			0x00, 0x00
+		};
+
+		update_crc(q);
+
+		REQUIRE(
+				cdrom_file::classify_subcode_q(q)
+					== cdrom_file::q_type::lead_out);
+
+		cdrom_file::q_position position;
+		REQUIRE_FALSE(cdrom_file::decode_subcode_q(q, position));
+	}
+
+	SECTION("catalog")
+	{
+		uint8_t q[12] = {};
+		q[0] = cdrom_file::CD_FLAG_ADR_CATALOG_CODE;
+
+		update_crc(q);
+
+		REQUIRE(
+				cdrom_file::classify_subcode_q(q)
+					== cdrom_file::q_type::catalog);
+	}
+
+	SECTION("ISRC")
+	{
+		uint8_t q[12] = {};
+		q[0] = cdrom_file::CD_FLAG_ADR_ISRC_CODE;
+
+		update_crc(q);
+
+		REQUIRE(
+				cdrom_file::classify_subcode_q(q)
+					== cdrom_file::q_type::isrc);
+	}
+
+	SECTION("unknown ADR")
+	{
+		uint8_t q[12] = {};
+		q[0] = 0x04;
+
+		update_crc(q);
+
+		REQUIRE(
+				cdrom_file::classify_subcode_q(q)
+					== cdrom_file::q_type::unknown);
+	}
+
+	SECTION("invalid CRC")
+	{
+		cdrom_file::q_position position;
+		position.adr_control = cdrom_file::CD_FLAG_ADR_START_TIME << 4;
+		position.track = 1;
+		position.index = 1;
+		position.relative_frame = 0;
+		position.absolute_frame = 150;
+
+		uint8_t q[12];
+		cdrom_file::encode_subcode_q(position, q);
+
+		q[10] ^= 0x01;
+
+		REQUIRE(
+				cdrom_file::classify_subcode_q(q)
+					== cdrom_file::q_type::invalid);
+	}
+}
+
 TEST_CASE("CD-ROM Q subchannel encode decode round trip", "[util][cdrom]")
 {
 	cdrom_file::q_position input;
