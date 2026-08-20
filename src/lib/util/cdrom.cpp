@@ -772,6 +772,41 @@ bool cdrom_file::decode_subcode_q(const uint8_t *q, q_position &position)
 	return true;
 }
 
+bool cdrom_file::decode_subcode_q_toc(const uint8_t *q, q_toc &toc)
+{
+	if (classify_subcode_q(q) != q_type::lead_in_toc)
+		return false;
+
+	// ADR=1 lead-in TOC packets use track 00.
+	if (q[1] != 0x00)
+		return false;
+
+	uint8_t minute;
+	uint8_t second;
+	uint8_t frame;
+
+	if (!from_bcd(q[7], minute)
+			|| !from_bcd(q[8], second)
+			|| !from_bcd(q[9], frame))
+	{
+		return false;
+	}
+
+	if (second >= 60 || frame >= 75)
+		return false;
+
+	toc.adr_control =
+			((q[0] & 0x0f) << 4)
+				| ((q[0] & 0xf0) >> 4);
+
+	toc.point = q[2];
+	toc.minute = minute;
+	toc.second = second;
+	toc.frame = frame;
+
+	return true;
+}
+
 bool cdrom_file::make_subcode_q_position(
 		const toc &toc,
 		uint32_t tracknum,
