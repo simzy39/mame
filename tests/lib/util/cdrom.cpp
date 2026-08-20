@@ -750,6 +750,151 @@ TEST_CASE("CD-ROM Q subchannel packet classification", "[util][cdrom]")
 	}
 }
 
+TEST_CASE("CD-ROM Q subchannel lead-in TOC decode", "[util][cdrom]")
+{
+	auto update_crc = [] (uint8_t *q)
+	{
+		const uint16_t crc = reference_q_crc(q);
+		q[10] = uint8_t(crc >> 8);
+		q[11] = uint8_t(crc);
+	};
+
+	SECTION("A0 first track")
+	{
+		uint8_t q[12] =
+		{
+			0x01,
+			0x00,
+			0xa0,
+			0x00, 0x00, 0x00,
+			0x00,
+			0x01, 0x00, 0x00,
+			0x00, 0x00
+		};
+
+		update_crc(q);
+
+		cdrom_file::q_toc toc;
+		REQUIRE(cdrom_file::decode_subcode_q_toc(q, toc));
+
+		REQUIRE(toc.point == 0xa0);
+		REQUIRE(toc.minute == 1);
+		REQUIRE(toc.second == 0);
+		REQUIRE(toc.frame == 0);
+	}
+
+	SECTION("A1 last track")
+	{
+		uint8_t q[12] =
+		{
+			0x01,
+			0x00,
+			0xa1,
+			0x00, 0x00, 0x00,
+			0x00,
+			0x12, 0x00, 0x00,
+			0x00, 0x00
+		};
+
+		update_crc(q);
+
+		cdrom_file::q_toc toc;
+		REQUIRE(cdrom_file::decode_subcode_q_toc(q, toc));
+
+		REQUIRE(toc.point == 0xa1);
+		REQUIRE(toc.minute == 12);
+		REQUIRE(toc.second == 0);
+		REQUIRE(toc.frame == 0);
+	}
+
+	SECTION("A2 lead-out position")
+	{
+		uint8_t q[12] =
+		{
+			0x01,
+			0x00,
+			0xa2,
+			0x00, 0x00, 0x00,
+			0x00,
+			0x42, 0x17, 0x23,
+			0x00, 0x00
+		};
+
+		update_crc(q);
+
+		cdrom_file::q_toc toc;
+		REQUIRE(cdrom_file::decode_subcode_q_toc(q, toc));
+
+		REQUIRE(toc.point == 0xa2);
+		REQUIRE(toc.minute == 42);
+		REQUIRE(toc.second == 17);
+		REQUIRE(toc.frame == 23);
+	}
+
+	SECTION("track point")
+	{
+		uint8_t q[12] =
+		{
+			0x01,
+			0x00,
+			0x03,
+			0x00, 0x00, 0x00,
+			0x00,
+			0x12, 0x34, 0x56,
+			0x00, 0x00
+		};
+
+		update_crc(q);
+
+		cdrom_file::q_toc toc;
+		REQUIRE(cdrom_file::decode_subcode_q_toc(q, toc));
+
+		REQUIRE(toc.point == 0x03);
+		REQUIRE(toc.minute == 12);
+		REQUIRE(toc.second == 34);
+		REQUIRE(toc.frame == 56);
+	}
+
+	SECTION("invalid CRC")
+	{
+		uint8_t q[12] =
+		{
+			0x01,
+			0x00,
+			0xa0,
+			0x00, 0x00, 0x00,
+			0x00,
+			0x01, 0x00, 0x00,
+			0x00, 0x00
+		};
+
+		update_crc(q);
+		q[10] ^= 0x01;
+
+		cdrom_file::q_toc toc;
+		REQUIRE_FALSE(cdrom_file::decode_subcode_q_toc(q, toc));
+	}
+
+	SECTION("invalid MSF")
+	{
+		uint8_t q[12] =
+		{
+			0x01,
+			0x00,
+			0xa2,
+			0x00, 0x00, 0x00,
+			0x00,
+			0x12, 0x60, 0x00,
+			0x00, 0x00
+		};
+
+		update_crc(q);
+
+		cdrom_file::q_toc toc;
+		REQUIRE_FALSE(cdrom_file::decode_subcode_q_toc(q, toc));
+	}
+}
+
 TEST_CASE("CD-ROM Q subchannel encode decode round trip", "[util][cdrom]")
 {
 	cdrom_file::q_position input;
