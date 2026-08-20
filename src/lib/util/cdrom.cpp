@@ -985,6 +985,50 @@ bool cdrom_file::apply_q_toc_accumulator(
 	if (!accumulator.complete())
 		return false;
 
+	cdrom_file::disc updated = disc;
+
+	q_toc_semantics semantics;
+
+	semantics.adr_control = CD_FLAG_ADR_START_TIME << 4;
+	semantics.kind = q_toc_kind::first_track;
+	semantics.point = 0xa0;
+	semantics.track = accumulator.first_track;
+	semantics.start_frame = std::nullopt;
+	semantics.disc_type = accumulator.disc_type;
+
+	if (!apply_q_toc_semantics(semantics, updated, session_number))
+		return false;
+
+	semantics.kind = q_toc_kind::last_track;
+	semantics.point = 0xa1;
+	semantics.track = accumulator.last_track;
+	semantics.disc_type = std::nullopt;
+
+	if (!apply_q_toc_semantics(semantics, updated, session_number))
+		return false;
+
+	semantics.kind = q_toc_kind::lead_out;
+	semantics.point = 0xa2;
+	semantics.track = std::nullopt;
+	semantics.start_frame = accumulator.lead_out_start_frame;
+
+	if (!apply_q_toc_semantics(semantics, updated, session_number))
+		return false;
+
+	for (const q_toc_semantics &track : accumulator.tracks)
+	{
+		if (!apply_q_toc_semantics(track, updated, session_number))
+			return false;
+	}
+
+	disc = std::move(updated);
+	return true;
+}
+
+{
+	if (!accumulator.complete())
+		return false;
+
 	q_toc_semantics semantics;
 
 	semantics.adr_control = CD_FLAG_ADR_START_TIME << 4;
