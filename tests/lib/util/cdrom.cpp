@@ -493,7 +493,7 @@ TEST_CASE("CD-ROM canonical disc model distinguishes virtual and stored pregaps"
 				"DATAFILE \"track1.bin\" 00:00:00 00:03:00\n";
 	}
 
-	{
+		{
 		cdrom_file cd(cuepath.string());
 		const cdrom_file::disc disc = cd.get_disc();
 
@@ -505,6 +505,16 @@ TEST_CASE("CD-ROM canonical disc model distinguishes virtual and stored pregaps"
 		REQUIRE(pregap.kind == cdrom_file::region_kind::pregap);
 		REQUIRE(pregap.frames == 150);
 		REQUIRE(pregap.main_data == cdrom_file::region_presence::captured);
+		REQUIRE(pregap.start_frame == 0);
+
+		const auto &program = disc.tracks[0].regions[1];
+
+		REQUIRE(program.kind == cdrom_file::region_kind::program);
+		REQUIRE(program.start_frame == 150);
+
+		REQUIRE(disc.tracks[0].indexes.size() >= 1);
+		REQUIRE(disc.tracks[0].indexes[0].number == 1);
+		REQUIRE(disc.tracks[0].indexes[0].start_frame == 150);
 	}
 
 	{
@@ -519,6 +529,16 @@ TEST_CASE("CD-ROM canonical disc model distinguishes virtual and stored pregaps"
 		REQUIRE(pregap.kind == cdrom_file::region_kind::pregap);
 		REQUIRE(pregap.frames == 150);
 		REQUIRE(pregap.main_data == cdrom_file::region_presence::unknown);
+		REQUIRE(pregap.start_frame == 0);
+
+		const auto &program = disc.tracks[0].regions[1];
+
+		REQUIRE(program.kind == cdrom_file::region_kind::program);
+		REQUIRE(program.start_frame == 150);
+
+		REQUIRE(disc.tracks[0].indexes.size() >= 1);
+		REQUIRE(disc.tracks[0].indexes[0].number == 1);
+		REQUIRE(disc.tracks[0].indexes[0].start_frame == 150);
 	}
 
 	std::filesystem::remove_all(tempdir);
