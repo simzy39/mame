@@ -2,6 +2,7 @@
 
 #include "cdrom.h"
 
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <vector>
@@ -1310,6 +1311,145 @@ TEST_CASE("CD-ROM Q TOC accumulator", "[util][cdrom]")
 				make_track(4, 2500), accumulator));
 
 		REQUIRE(accumulator.complete());
+	}
+}
+
+TEST_CASE("CD-ROM raw Q TOC accumulation", "[util][cdrom]")
+{
+	auto make_q = [] (
+			uint8_t point,
+			uint8_t minute,
+			uint8_t second,
+			uint8_t frame)
+	{
+		std::array<uint8_t, 12> q =
+		{
+			0x01,
+			0x00,
+			point,
+			0x00, 0x00, 0x00,
+			0x00,
+			minute,
+			second,
+			frame,
+			0x00, 0x00
+		};
+
+		const uint16_t crc = reference_q_crc(q.data());
+		q[10] = uint8_t(crc >> 8);
+		q[11] = uint8_t(crc);
+
+		return q;
+	};
+
+	SECTION("collects complete TOC from raw Q packets")
+	{
+		cdrom_file::q_toc_accumulator accumulator;
+
+		const auto a0 = make_q(0xa0, 0x03, 0x20, 0x00);
+		const auto a1 = make_q(0xa1, 0x04, 0x00, 0x00);
+		const auto a2 = make_q(0xa2, 0x01, 0x06, 0x50);
+		const auto track3 = make_q(0x03, 0x00, 0x13, 0x25);
+		const auto track4 = make_q(0x04, 0x00, 0x40, 0x00);
+
+		REQUIRE(cdrom_file::accumulate_subcode_q_toc(
+				a0.data(), accumulator));
+		REQUIRE(cdrom_file::accumulate_subcode_q_toc(
+				a1.data(), accumulator));
+		REQUIRE(cdrom_file::accumulate_subcode_q_toc(
+				a2.data(), accumulator));
+		REQUIRE(cdrom_file::accumulate_subcode_q_toc(
+				track3.data(), accumulator));
+
+		REQUIRE_FALSE(accumulator.complete());
+
+		REQUIRE(cdrom_file::accumulate_subcode_q_toc(
+				track4.data(), accumulator));
+
+		REQUIRE(accumulator.complete());
+		REQUIRE_FALSE(accumulator.conflict);
+
+		REQUIRE(accumulator.first_track.has_value());
+		REQUIRE(*accumulator.first_track == 3);
+
+		REQUIRE(accumulator.last_track.has_value());
+		REQUIRE(*accumulator.last_track == 4);
+
+		REQUIRE(accumulator.disc_type.has_value());
+		REQUIRE(*accumulator.disc_type == 0x20);
+
+		REQUIRE(accumulator.lead_out_start_frame.has_value());
+		REQUIRE(
+				*accumulator.lead_out_start_frame
+					== (1U * 60U * 75U) + (6U * 75U) + 50U);
+
+		REQUIRE(accumulator.tracks.size() == 2);
+		REQUIRE(accumulator.tracks[0].track.has_value());
+		REQUIRE(*accumulator.tracks[0].track == 3);
+		REQUIRE(accumulator.tracks[0].start_frame.has_value());
+		REQUIRE(
+				*accumulator.tracks[0].start_frame
+					== (13U * 75U) + 25U);
+
+		REQUIRE(accumulator.tracks[1].track.has_value());
+		REQUIRE(*accumulator.tracks[1].track == 4);
+		REQUIRE(accumulator.tracks[1].start_frame.has_value());
+		REQUIRE(
+				*accumulator.tracks[1].start_frame
+					== 40U * 75U);
+	}
+
+	SECTION("rejects invalid CRC without changing accumulator")
+	{
+		cdrom_file::q_toc_accumulator accumulator;
+
+		auto q = make_q(0xa0, 0x03, 0x20, 0x00);
+		q[7] ^= 0x01;
+
+		REQUIRE_FALSE(cdrom_file::accumulate_subcode_q_toc(
+				q.data(), accumulator));
+
+		REQUIRE_FALSE(accumulator.first_track.has_value());
+		REQUIRE_FALSE(accumulator.conflict);
+		REQUIRE(accumulator.tracks.empty());
+	}
+
+	SECTION("rejects non-TOC Q without changing accumulator")
+	{
+		cdrom_file::q_toc_accumulator accumulator;
+
+		cdrom_file::q_position position;
+		position.adr_control = cdrom_file::CD_FLAG_ADR_START_TIME << 4;
+		position.track = 1;
+		position.index = 1;
+		position.relative_frame = 0;
+		position.absolute_frame = 150;
+
+		uint8_t q[12];
+		cdrom_file::encode_subcode_q(position, q);
+
+		REQUIRE_FALSE(cdrom_file::accumulate_subcode_q_toc(
+				q, accumulator));
+
+		REQUIRE_FALSE(accumulator.first_track.has_value());
+		REQUIRE_FALSE(accumulator.conflict);
+		REQUIRE(accumulator.tracks.empty());
+	}
+
+	SECTION("propagates semantic conflicts")
+	{
+		cdrom_file::q_toc_accumulator accumulator;
+
+		const auto first3 = make_q(0xa0, 0x03, 0x20, 0x00);
+		const auto first4 = make_q(0xa0, 0x04, 0x20, 0x00);
+
+		REQUIRE(cdrom_file::accumulate_subcode_q_toc(
+				first3.data(), accumulator));
+
+		REQUIRE_FALSE(cdrom_file::accumulate_subcode_q_toc(
+				first4.data(), accumulator));
+
+		REQUIRE(accumulator.conflict);
 	}
 }
 
