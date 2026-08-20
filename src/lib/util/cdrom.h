@@ -86,9 +86,11 @@ public:
 
 	enum class region_kind
 	{
+		lead_in,
 		pregap,
 		program,
-		postgap
+		postgap,
+		lead_out
 	};
 
 	enum class region_presence
@@ -102,7 +104,7 @@ public:
 	{
 		region_kind kind;
 		int32_t start_frame;
-		uint32_t frames;
+		std::optional<uint32_t> frames;
 		region_presence main_data;
 		region_presence subcode;
 	};
@@ -132,8 +134,8 @@ public:
 
 		int32_t program_start_frame;
 
-		std::optional<int32_t> lead_in_start_frame;
-		std::optional<int32_t> lead_out_start_frame;
+		std::optional<region> lead_in;
+		std::optional<region> lead_out;
 	};
 
 	struct disc
