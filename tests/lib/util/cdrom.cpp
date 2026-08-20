@@ -1016,6 +1016,151 @@ TEST_CASE("CD-ROM Q subchannel lead-in TOC semantics", "[util][cdrom]")
 	}
 }
 
+TEST_CASE("CD-ROM Q TOC semantics update canonical disc model", "[util][cdrom]")
+{
+    cdrom_file::disc disc;
+
+    cdrom_file::disc_session session;
+    session.number = 2;
+    session.first_track = 3;
+    session.last_track = 4;
+    session.program_start_frame = 1000;
+    session.lead_in_start_frame = std::nullopt;
+    session.lead_out_start_frame = std::nullopt;
+    disc.sessions.push_back(session);
+
+    cdrom_file::disc_track track;
+    track.number = 3;
+    track.session = 2;
+    track.type = cdrom_file::CD_TRACK_AUDIO;
+    track.control_flags = 0;
+    track.indexes.push_back({ 1, 1000 });
+    disc.tracks.push_back(track);
+
+    SECTION("A0 updates first track")
+    {
+        cdrom_file::q_toc_semantics semantics;
+        semantics.adr_control = cdrom_file::CD_FLAG_ADR_START_TIME << 4;
+        semantics.kind = cdrom_file::q_toc_kind::first_track;
+        semantics.point = 0xa0;
+        semantics.track = 2;
+        semantics.start_frame = std::nullopt;
+        semantics.disc_type = 0x20;
+
+        REQUIRE(cdrom_file::apply_q_toc_semantics(
+                semantics, disc, 2));
+
+        REQUIRE(disc.sessions[0].first_track == 2);
+        REQUIRE(disc.sessions[0].last_track == 4);
+    }
+
+    SECTION("A1 updates last track")
+    {
+        cdrom_file::q_toc_semantics semantics;
+        semantics.adr_control = cdrom_file::CD_FLAG_ADR_START_TIME << 4;
+        semantics.kind = cdrom_file::q_toc_kind::last_track;
+        semantics.point = 0xa1;
+        semantics.track = 7;
+        semantics.start_frame = std::nullopt;
+        semantics.disc_type = std::nullopt;
+
+        REQUIRE(cdrom_file::apply_q_toc_semantics(
+                semantics, disc, 2));
+
+        REQUIRE(disc.sessions[0].first_track == 3);
+        REQUIRE(disc.sessions[0].last_track == 7);
+    }
+
+    SECTION("A2 updates lead-out")
+    {
+        cdrom_file::q_toc_semantics semantics;
+        semantics.adr_control = cdrom_file::CD_FLAG_ADR_START_TIME << 4;
+        semantics.kind = cdrom_file::q_toc_kind::lead_out;
+        semantics.point = 0xa2;
+        semantics.track = std::nullopt;
+        semantics.start_frame = 12345;
+        semantics.disc_type = std::nullopt;
+
+        REQUIRE(cdrom_file::apply_q_toc_semantics(
+                semantics, disc, 2));
+
+        REQUIRE(disc.sessions[0].lead_out_start_frame.has_value());
+        REQUIRE(*disc.sessions[0].lead_out_start_frame == 12345);
+    }
+
+    SECTION("track point updates INDEX 01")
+    {
+        cdrom_file::q_toc_semantics semantics;
+        semantics.adr_control = cdrom_file::CD_FLAG_ADR_START_TIME << 4;
+        semantics.kind = cdrom_file::q_toc_kind::track;
+        semantics.point = 0x03;
+        semantics.track = 3;
+        semantics.start_frame = 2345;
+        semantics.disc_type = std::nullopt;
+
+        REQUIRE(cdrom_file::apply_q_toc_semantics(
+                semantics, disc, 2));
+
+        REQUIRE(disc.tracks[0].indexes.size() == 1);
+        REQUIRE(disc.tracks[0].indexes[0].number == 1);
+        REQUIRE(disc.tracks[0].indexes[0].start_frame == 2345);
+    }
+
+    SECTION("track point can create missing INDEX 01")
+    {
+        disc.tracks[0].indexes.clear();
+
+        cdrom_file::q_toc_semantics semantics;
+        semantics.adr_control = cdrom_file::CD_FLAG_ADR_START_TIME << 4;
+        semantics.kind = cdrom_file::q_toc_kind::track;
+        semantics.point = 0x03;
+        semantics.track = 3;
+        semantics.start_frame = 2345;
+        semantics.disc_type = std::nullopt;
+
+        REQUIRE(cdrom_file::apply_q_toc_semantics(
+                semantics, disc, 2));
+
+        REQUIRE(disc.tracks[0].indexes.size() == 1);
+        REQUIRE(disc.tracks[0].indexes[0].number == 1);
+        REQUIRE(disc.tracks[0].indexes[0].start_frame == 2345);
+    }
+
+    SECTION("special point does not alter canonical model")
+    {
+        cdrom_file::q_toc_semantics semantics;
+        semantics.adr_control = cdrom_file::CD_FLAG_ADR_START_TIME << 4;
+        semantics.kind = cdrom_file::q_toc_kind::special;
+        semantics.point = 0xb0;
+        semantics.track = std::nullopt;
+        semantics.start_frame = std::nullopt;
+        semantics.disc_type = std::nullopt;
+
+        REQUIRE_FALSE(cdrom_file::apply_q_toc_semantics(
+                semantics, disc, 2));
+
+        REQUIRE(disc.sessions[0].first_track == 3);
+        REQUIRE(disc.sessions[0].last_track == 4);
+        REQUIRE(disc.tracks[0].indexes[0].start_frame == 1000);
+    }
+
+    SECTION("wrong session is rejected")
+    {
+        cdrom_file::q_toc_semantics semantics;
+        semantics.adr_control = cdrom_file::CD_FLAG_ADR_START_TIME << 4;
+        semantics.kind = cdrom_file::q_toc_kind::first_track;
+        semantics.point = 0xa0;
+        semantics.track = 2;
+        semantics.start_frame = std::nullopt;
+        semantics.disc_type = std::nullopt;
+
+        REQUIRE_FALSE(cdrom_file::apply_q_toc_semantics(
+                semantics, disc, 1));
+
+        REQUIRE(disc.sessions[0].first_track == 3);
+    }
+}
+
 TEST_CASE("CD-ROM Q subchannel encode decode round trip", "[util][cdrom]")
 {
 	cdrom_file::q_position input;
