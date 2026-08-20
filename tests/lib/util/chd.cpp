@@ -31,6 +31,94 @@ static void make_position_q(
 	cdrom_file::pack_subcode_q(q, subcode);
 }
 
+TEST_CASE("CD CHD canonical disc model reconstructs sessions", "[util][chd][cdrom]")
+{
+	const std::filesystem::path tempdir =
+			std::filesystem::temp_directory_path() / "mame-chd-cd-session-model-test";
+	const std::filesystem::path chdpath = tempdir / "sessions.chd";
+
+	std::filesystem::remove_all(tempdir);
+	std::filesystem::create_directories(tempdir);
+
+	constexpr uint32_t track_frames = 4;
+	constexpr uint32_t track_count = 4;
+	constexpr uint32_t frame_count = track_frames * track_count;
+	constexpr uint32_t hunk_bytes =
+			cdrom_file::FRAME_SIZE * cdrom_file::FRAMES_PER_HUNK;
+
+	const chd_codec_type compression[4] =
+	{
+		CHD_CODEC_NONE,
+		CHD_CODEC_NONE,
+		CHD_CODEC_NONE,
+		CHD_CODEC_NONE
+	};
+
+	chd_file chd;
+
+	REQUIRE_FALSE(chd.create(
+			chdpath.string(),
+			uint64_t(frame_count) * cdrom_file::FRAME_SIZE,
+			hunk_bytes,
+			cdrom_file::FRAME_SIZE,
+			compression));
+
+	cdrom_file::toc toc{};
+	toc.numtrks = track_count;
+	toc.numsessions = 2;
+	toc.flags = cdrom_file::CD_FLAG_MULTISESSION;
+
+	for (uint32_t tracknum = 0; tracknum < track_count; tracknum++)
+	{
+		cdrom_file::track_info &track = toc.tracks[tracknum];
+
+		track.trktype = cdrom_file::CD_TRACK_AUDIO;
+		track.subtype = cdrom_file::CD_SUB_NONE;
+		track.datasize = cdrom_file::MAX_SECTOR_DATA;
+		track.subsize = 0;
+		track.frames = track_frames;
+		track.extraframes = 0;
+		track.pregap = 0;
+		track.postgap = 0;
+		track.pgtype = cdrom_file::CD_TRACK_AUDIO;
+		track.pgsub = cdrom_file::CD_SUB_NONE;
+		track.pgdatasize = 0;
+		track.pgsubsize = 0;
+		track.control_flags = 0;
+		track.session = (tracknum < 2) ? 0 : 1;
+
+		std::fill(std::begin(track.idx), std::end(track.idx), -1);
+	}
+
+	REQUIRE_FALSE(cdrom_file::write_metadata(&chd, toc));
+
+	std::vector<uint8_t> frame(cdrom_file::FRAME_SIZE, 0);
+
+	for (uint32_t framenum = 0; framenum < frame_count; framenum++)
+		REQUIRE_FALSE(chd.write_units(framenum, frame.data()));
+
+	cdrom_file cd(&chd);
+	const cdrom_file::disc disc = cd.get_disc();
+
+	REQUIRE(disc.sessions.size() == 2);
+	REQUIRE(disc.tracks.size() == 4);
+
+	REQUIRE(disc.sessions[0].number == 1);
+	REQUIRE(disc.sessions[0].first_track == 1);
+	REQUIRE(disc.sessions[0].last_track == 2);
+	REQUIRE(disc.sessions[0].program_start == 0);
+	REQUIRE_FALSE(disc.sessions[0].lead_in_start.has_value());
+	REQUIRE_FALSE(disc.sessions[0].lead_out_start.has_value());
+
+	REQUIRE(disc.sessions[1].number == 2);
+	REQUIRE(disc.sessions[1].first_track == 3);
+	REQUIRE(disc.sessions[1].last_track == 4);
+	REQUIRE(disc.sessions[1].program_start == 8);
+	REQUIRE_FALSE(disc.sessions[1].lead_in_start.has_value());
+	REQUIRE_FALSE(disc.sessions[1].lead_out_start.has_value());
+
+	std::filesystem::remove_all(tempdir);
+}
 
 TEST_CASE("CD CHD reconstructs track indexes from stored Q", "[util][chd][cdrom]")
 {
