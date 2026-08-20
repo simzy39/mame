@@ -875,6 +875,92 @@ bool cdrom_file::interpret_subcode_q_toc(
 	return true;
 }
 
+bool cdrom_file::apply_q_toc_semantics(
+        const q_toc_semantics &semantics,
+        disc &disc,
+        uint8_t session_number)
+{
+    auto session_it = std::find_if(
+            disc.sessions.begin(),
+            disc.sessions.end(),
+            [session_number](const disc_session &session)
+            {
+                return session.number == session_number;
+            });
+
+    if (session_it == disc.sessions.end())
+        return false;
+
+    switch (semantics.kind)
+    {
+    case q_toc_kind::first_track:
+        if (!semantics.track)
+            return false;
+
+        session_it->first_track = *semantics.track;
+        return true;
+
+    case q_toc_kind::last_track:
+        if (!semantics.track)
+            return false;
+
+        session_it->last_track = *semantics.track;
+        return true;
+
+    case q_toc_kind::lead_out:
+        if (!semantics.start_frame)
+            return false;
+
+        session_it->lead_out_start_frame =
+                int32_t(*semantics.start_frame);
+        return true;
+
+    case q_toc_kind::track:
+        if (!semantics.track || !semantics.start_frame)
+            return false;
+
+        {
+            auto track_it = std::find_if(
+                    disc.tracks.begin(),
+                    disc.tracks.end(),
+                    [&semantics, session_number](const disc_track &track)
+                    {
+                        return track.session == session_number
+                                && track.number == *semantics.track;
+                    });
+
+            if (track_it == disc.tracks.end())
+                return false;
+
+            auto index_it = std::find_if(
+                    track_it->indexes.begin(),
+                    track_it->indexes.end(),
+                    [](const index &entry)
+                    {
+                        return entry.number == 1;
+                    });
+
+            if (index_it == track_it->indexes.end())
+            {
+                track_it->indexes.push_back(
+                        { 1, int32_t(*semantics.start_frame) });
+            }
+            else
+            {
+                index_it->start_frame =
+                        int32_t(*semantics.start_frame);
+            }
+
+            return true;
+        }
+
+    case q_toc_kind::special:
+        return false;
+    }
+
+    return false;
+}
+
 bool cdrom_file::make_subcode_q_position(
 		const toc &toc,
 		uint32_t tracknum,
