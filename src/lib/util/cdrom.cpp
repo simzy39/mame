@@ -875,6 +875,153 @@ bool cdrom_file::interpret_subcode_q_toc(
 	return true;
 }
 
+bool cdrom_file::q_toc_accumulator::complete() const
+{
+	if (conflict
+			|| !first_track.has_value()
+			|| !last_track.has_value()
+			|| !lead_out_start_frame.has_value()
+			|| *first_track > *last_track)
+	{
+		return false;
+	}
+
+	for (uint16_t track = *first_track; track <= *last_track; track++)
+	{
+		const auto found = std::find_if(
+				tracks.begin(),
+				tracks.end(),
+				[track] (const q_toc_semantics &semantics)
+				{
+					return semantics.track.has_value()
+							&& *semantics.track == track;
+				});
+
+		if (found == tracks.end())
+			return false;
+	}
+
+	return true;
+}
+
+
+bool cdrom_file::accumulate_q_toc_semantics(
+		const q_toc_semantics &semantics,
+		q_toc_accumulator &accumulator)
+{
+	if (accumulator.conflict)
+		return false;
+
+	auto merge = [&accumulator] (auto &target, const auto &value)
+	{
+		if (!value.has_value())
+			return false;
+
+		if (target.has_value() && *target != *value)
+		{
+			accumulator.conflict = true;
+			return false;
+		}
+
+		target = value;
+		return true;
+	};
+
+	switch (semantics.kind)
+	{
+	case q_toc_kind::first_track:
+		if (!merge(accumulator.first_track, semantics.track))
+			return false;
+
+		if (semantics.disc_type.has_value()
+				&& !merge(accumulator.disc_type, semantics.disc_type))
+		{
+			return false;
+		}
+
+		return true;
+
+	case q_toc_kind::last_track:
+		return merge(accumulator.last_track, semantics.track);
+
+	case q_toc_kind::lead_out:
+		return merge(accumulator.lead_out_start_frame, semantics.start_frame);
+
+	case q_toc_kind::track:
+		if (!semantics.track.has_value() || !semantics.start_frame.has_value())
+			return false;
+
+		for (const q_toc_semantics &existing : accumulator.tracks)
+		{
+			if (existing.track != semantics.track)
+				continue;
+
+			if (existing.start_frame != semantics.start_frame
+					|| existing.adr_control != semantics.adr_control)
+			{
+				accumulator.conflict = true;
+				return false;
+			}
+
+			return true;
+		}
+
+		accumulator.tracks.push_back(semantics);
+		return true;
+
+	case q_toc_kind::special:
+		return false;
+	}
+
+	return false;
+}
+
+
+bool cdrom_file::apply_q_toc_accumulator(
+		const q_toc_accumulator &accumulator,
+		disc &disc,
+		uint8_t session_number)
+{
+	if (!accumulator.complete())
+		return false;
+
+	q_toc_semantics semantics;
+
+	semantics.adr_control = CD_FLAG_ADR_START_TIME << 4;
+	semantics.kind = q_toc_kind::first_track;
+	semantics.point = 0xa0;
+	semantics.track = accumulator.first_track;
+	semantics.start_frame = std::nullopt;
+	semantics.disc_type = accumulator.disc_type;
+
+	if (!apply_q_toc_semantics(semantics, disc, session_number))
+		return false;
+
+	semantics.kind = q_toc_kind::last_track;
+	semantics.point = 0xa1;
+	semantics.track = accumulator.last_track;
+	semantics.disc_type = std::nullopt;
+
+	if (!apply_q_toc_semantics(semantics, disc, session_number))
+		return false;
+
+	semantics.kind = q_toc_kind::lead_out;
+	semantics.point = 0xa2;
+	semantics.track = std::nullopt;
+	semantics.start_frame = accumulator.lead_out_start_frame;
+
+	if (!apply_q_toc_semantics(semantics, disc, session_number))
+		return false;
+
+	for (const q_toc_semantics &track : accumulator.tracks)
+	{
+		if (!apply_q_toc_semantics(track, disc, session_number))
+			return false;
+	}
+
+	return true;
+}
+
 bool cdrom_file::apply_q_toc_semantics(
         const q_toc_semantics &semantics,
         disc &disc,
