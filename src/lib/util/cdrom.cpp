@@ -807,6 +807,74 @@ bool cdrom_file::decode_subcode_q_toc(const uint8_t *q, q_toc &toc)
 	return true;
 }
 
+bool cdrom_file::interpret_subcode_q_toc(
+		const q_toc &toc,
+		q_toc_semantics &semantics)
+{
+	semantics.adr_control = toc.adr_control;
+	semantics.point = toc.point;
+	semantics.track = std::nullopt;
+	semantics.start_frame = std::nullopt;
+	semantics.disc_type = std::nullopt;
+
+	switch (toc.point)
+	{
+	case 0xa0:
+		if (toc.minute == 0 || toc.minute > MAX_TRACKS || toc.frame != 0)
+			return false;
+
+		semantics.kind = q_toc_kind::first_track;
+		semantics.track = toc.minute;
+		semantics.disc_type = to_bcd(toc.second);
+		return true;
+
+	case 0xa1:
+		if (toc.minute == 0
+				|| toc.minute > MAX_TRACKS
+				|| toc.second != 0
+				|| toc.frame != 0)
+		{
+			return false;
+		}
+
+		semantics.kind = q_toc_kind::last_track;
+		semantics.track = toc.minute;
+		return true;
+
+	case 0xa2:
+		semantics.kind = q_toc_kind::lead_out;
+		semantics.start_frame =
+				uint32_t(toc.minute) * 60 * 75
+					+ uint32_t(toc.second) * 75
+					+ toc.frame;
+		return true;
+
+	default:
+		break;
+	}
+
+	uint8_t track;
+
+	if (from_bcd(toc.point, track)
+			&& track != 0
+			&& track <= MAX_TRACKS)
+	{
+		semantics.kind = q_toc_kind::track;
+		semantics.track = track;
+		semantics.start_frame =
+				uint32_t(toc.minute) * 60 * 75
+					+ uint32_t(toc.second) * 75
+					+ toc.frame;
+		return true;
+	}
+
+	// Other lead-in POINT values exist, particularly for multisession
+	// discs.  Preserve their identity rather than treating them as a
+	// normal track point.
+	semantics.kind = q_toc_kind::special;
+	return true;
+}
+
 bool cdrom_file::make_subcode_q_position(
 		const toc &toc,
 		uint32_t tracknum,
