@@ -1046,6 +1046,7 @@ cdrom_file::disc cdrom_file::get_disc() const
 {
 	disc result;
 
+	result.sessions.reserve(cdtoc.numsessions ? cdtoc.numsessions : 1);
 	result.tracks.reserve(cdtoc.numtrks);
 
 	for (uint32_t tracknum = 0; tracknum < cdtoc.numtrks; tracknum++)
@@ -1112,6 +1113,44 @@ cdrom_file::disc cdrom_file::get_disc() const
 		}
 
 		result.tracks.push_back(std::move(track));
+	}
+	
+	return result;
+
+		const uint32_t session_count = cdtoc.numsessions ? cdtoc.numsessions : 1;
+
+	for (uint32_t sessionnum = 0; sessionnum < session_count; sessionnum++)
+	{
+		uint32_t first_track = cdtoc.numtrks;
+		uint32_t last_track = cdtoc.numtrks;
+
+		for (uint32_t tracknum = 0; tracknum < cdtoc.numtrks; tracknum++)
+		{
+			if (cdtoc.tracks[tracknum].session != sessionnum)
+				continue;
+
+			if (first_track == cdtoc.numtrks)
+				first_track = tracknum;
+
+			last_track = tracknum;
+		}
+
+		if (first_track == cdtoc.numtrks)
+			continue;
+
+		disc_session session;
+		session.number = sessionnum + 1;
+		session.first_track = first_track + 1;
+		session.last_track = last_track + 1;
+		session.program_start = cdtoc.tracks[first_track].logframeofs;
+
+		// The legacy TOC does not reliably retain actual session
+		// lead-in and lead-out positions.  Keep them unknown rather
+		// than reproducing assumptions made by individual drive layers.
+		session.lead_in_start = std::nullopt;
+		session.lead_out_start = std::nullopt;
+
+		result.sessions.push_back(std::move(session));
 	}
 
 	return result;
