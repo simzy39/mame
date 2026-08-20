@@ -450,6 +450,80 @@ TEST_CASE("CD-ROM raw subcode later-track virtual pregap", "[util][cdrom]")
 	std::filesystem::remove_all(tempdir);
 }
 
+TEST_CASE("CD-ROM canonical disc model distinguishes virtual and stored pregaps", "[util][cdrom]")
+{
+	const std::filesystem::path tempdir =
+			std::filesystem::temp_directory_path() / "mame-cdrom-disc-model-pregap-test";
+	const std::filesystem::path track1path = tempdir / "track1.bin";
+	const std::filesystem::path track2path = tempdir / "track2.bin";
+	const std::filesystem::path cuepath = tempdir / "stored.cue";
+	const std::filesystem::path tocpath = tempdir / "virtual.toc";
+
+	std::filesystem::remove_all(tempdir);
+	std::filesystem::create_directories(tempdir);
+
+	{
+		std::ofstream bin(track1path, std::ios::binary);
+		const std::vector<char> data(3 * 75 * 2352, 0);
+		bin.write(data.data(), data.size());
+	}
+
+	{
+		std::ofstream bin(track2path, std::ios::binary);
+		const std::vector<char> data(4 * 75 * 2352, 0);
+		bin.write(data.data(), data.size());
+	}
+
+	{
+		std::ofstream cue(cuepath);
+		cue <<
+				"FILE \"track2.bin\" BINARY\n"
+				"  TRACK 01 AUDIO\n"
+				"    INDEX 00 00:00:00\n"
+				"    INDEX 01 00:02:00\n";
+	}
+
+	{
+		std::ofstream toc(tocpath);
+		toc <<
+				"CD_DA\n"
+				"\n"
+				"TRACK AUDIO\n"
+				"START 00:02:00\n"
+				"DATAFILE \"track1.bin\" 00:00:00 00:03:00\n";
+	}
+
+	{
+		cdrom_file cd(cuepath.string());
+		const cdrom_file::disc disc = cd.get_disc();
+
+		REQUIRE(disc.tracks.size() == 1);
+		REQUIRE(disc.tracks[0].regions.size() >= 2);
+
+		const auto &pregap = disc.tracks[0].regions[0];
+
+		REQUIRE(pregap.kind == cdrom_file::region_kind::pregap);
+		REQUIRE(pregap.frames == 150);
+		REQUIRE(pregap.main_data == cdrom_file::region_presence::captured);
+	}
+
+	{
+		cdrom_file cd(tocpath.string());
+		const cdrom_file::disc disc = cd.get_disc();
+
+		REQUIRE(disc.tracks.size() == 1);
+		REQUIRE(disc.tracks[0].regions.size() >= 2);
+
+		const auto &pregap = disc.tracks[0].regions[0];
+
+		REQUIRE(pregap.kind == cdrom_file::region_kind::pregap);
+		REQUIRE(pregap.frames == 150);
+		REQUIRE(pregap.main_data == cdrom_file::region_presence::unknown);
+	}
+
+	std::filesystem::remove_all(tempdir);
+}
+
 TEST_CASE("CD-ROM Q subchannel later-track stored pregap", "[util][cdrom]")
 {
 	const std::filesystem::path tempdir =
