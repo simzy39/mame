@@ -124,7 +124,7 @@ public:
 		std::vector<region> regions;
 	};
 
-		struct disc_session
+	struct disc_session
 	{
 		uint8_t number;
 		uint8_t first_track;
@@ -223,14 +223,14 @@ public:
 		uint32_t absolute_frame;
 	};
 
-struct q_toc
-{
+	struct q_toc
+	{
 	uint8_t adr_control;
 	uint8_t point;
 	uint8_t minute;
 	uint8_t second;
 	uint8_t frame;
-};
+	};
 
 	enum class q_toc_kind
 	{
