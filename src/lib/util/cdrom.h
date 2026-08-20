@@ -20,6 +20,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <vector>
 
 
 class cdrom_file {
@@ -80,6 +81,51 @@ public:
 		CD_FLAG_ADR_START_TIME = 1,
 		CD_FLAG_ADR_CATALOG_CODE,
 		CD_FLAG_ADR_ISRC_CODE,
+	};
+
+	enum class region_kind
+	{
+		pregap,
+		program,
+		postgap
+	};
+
+	enum class region_presence
+	{
+		unknown,
+		generated,
+		captured
+	};
+
+	struct region
+	{
+		region_kind kind;
+		int32_t start;
+		uint32_t frames;
+		region_presence main_data;
+		region_presence subcode;
+	};
+
+	struct index
+	{
+		uint8_t number;
+		int32_t start;
+	};
+
+	struct disc_track
+	{
+		uint8_t number;
+		uint8_t session;
+		uint32_t type;
+		uint32_t control_flags;
+
+		std::vector<index> indexes;
+		std::vector<region> regions;
+	};
+
+	struct disc
+	{
+		std::vector<disc_track> tracks;
 	};
 
 	struct track_info
@@ -201,6 +247,7 @@ public:
 	}
 	int get_track_type(int track) const { return cdtoc.tracks[track].trktype; }
 	const toc &get_toc() const { return cdtoc; }
+	disc get_disc() const;
 	void reconstruct_track_indexes();
 
 	/* extra utilities */
