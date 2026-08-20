@@ -101,7 +101,7 @@ public:
 	struct region
 	{
 		region_kind kind;
-		int32_t start;
+		int32_t start_frame;
 		uint32_t frames;
 		region_presence main_data;
 		region_presence subcode;
@@ -110,7 +110,7 @@ public:
 	struct index
 	{
 		uint8_t number;
-		int32_t start;
+		int32_t start_frame;
 	};
 
 	struct disc_track
@@ -124,16 +124,16 @@ public:
 		std::vector<region> regions;
 	};
 
-	struct disc_session
+		struct disc_session
 	{
 		uint8_t number;
 		uint8_t first_track;
 		uint8_t last_track;
 
-		int32_t program_start;
+		int32_t program_start_frame;
 
-		std::optional<int32_t> lead_in_start;
-		std::optional<int32_t> lead_out_start;
+		std::optional<int32_t> lead_in_start_frame;
+		std::optional<int32_t> lead_out_start_frame;
 	};
 
 	struct disc
