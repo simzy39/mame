@@ -904,6 +904,22 @@ bool cdrom_file::q_toc_accumulator::complete() const
 	return true;
 }
 
+bool cdrom_file::accumulate_subcode_q_toc(
+		const uint8_t *q,
+		q_toc_accumulator &accumulator)
+{
+	q_toc toc;
+
+	if (!decode_subcode_q_toc(q, toc))
+		return false;
+
+	q_toc_semantics semantics;
+
+	if (!interpret_subcode_q_toc(toc, semantics))
+		return false;
+
+	return accumulate_q_toc_semantics(semantics, accumulator);
+}
 
 bool cdrom_file::accumulate_q_toc_semantics(
 		const q_toc_semantics &semantics,
