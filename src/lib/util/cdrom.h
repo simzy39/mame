@@ -270,6 +270,10 @@ struct q_toc
 	static bool interpret_subcode_q_toc(
 			const q_toc &toc,
 			q_toc_semantics &semantics);
+	static bool apply_q_toc_semantics(
+    	    const q_toc_semantics &semantics,
+        	disc &disc,
+        	uint8_t session_number);
 	static void pack_subcode_q(const uint8_t *q, uint8_t *subcode);
 	static void unpack_subcode_q(const uint8_t *subcode, uint8_t *q);
 	static bool make_subcode_q_position(
