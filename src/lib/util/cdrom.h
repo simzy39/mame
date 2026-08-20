@@ -282,6 +282,9 @@ public:
 	static bool interpret_subcode_q_toc(
 			const q_toc &toc,
 			q_toc_semantics &semantics);
+	static bool accumulate_subcode_q_toc(
+			const uint8_t *q,
+			q_toc_accumulator &accumulator);
 	static bool accumulate_q_toc_semantics(
 			const q_toc_semantics &semantics,
 			q_toc_accumulator &accumulator);
