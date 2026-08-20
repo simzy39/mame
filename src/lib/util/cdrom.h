@@ -203,6 +203,17 @@ public:
 		track_input_entry track[MAX_TRACKS];
 	};
 
+	enum class q_type
+	{
+		invalid,
+		position,
+		lead_in_toc,
+		lead_out,
+		catalog,
+		isrc,
+		unknown
+	};
+
 	struct q_position
 	{
 		uint8_t adr_control;
@@ -223,6 +234,7 @@ public:
 	bool get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys=false) const;
 	bool get_subcode_raw(uint32_t lbasector, uint8_t *buffer, bool phys=false) const;
 
+	static q_type classify_subcode_q(const uint8_t *q);	
 	static void encode_subcode_q(const q_position &position, uint8_t *buffer);
 	static bool decode_subcode_q(const uint8_t *q, q_position &position);
 	static void pack_subcode_q(const uint8_t *q, uint8_t *subcode);
