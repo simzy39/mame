@@ -106,14 +106,14 @@ TEST_CASE("CD CHD canonical disc model reconstructs sessions", "[util][chd][cdro
 	REQUIRE(disc.sessions[0].number == 1);
 	REQUIRE(disc.sessions[0].first_track == 1);
 	REQUIRE(disc.sessions[0].last_track == 2);
-	REQUIRE(disc.sessions[0].program_start_frame == 0);
+	REQUIRE(disc.sessions[0].program_start.frame == 0);
 	REQUIRE_FALSE(disc.sessions[0].lead_in.has_value());
 	REQUIRE_FALSE(disc.sessions[0].lead_out.has_value());
 
 	REQUIRE(disc.sessions[1].number == 2);
 	REQUIRE(disc.sessions[1].first_track == 3);
 	REQUIRE(disc.sessions[1].last_track == 4);
-	REQUIRE(disc.sessions[1].program_start_frame == 8);
+	REQUIRE(disc.sessions[1].program_start.frame == 8);
 	REQUIRE_FALSE(disc.sessions[1].lead_in.has_value());
 	REQUIRE_FALSE(disc.sessions[1].lead_out.has_value());
 
