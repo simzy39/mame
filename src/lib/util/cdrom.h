@@ -119,7 +119,7 @@ struct disc_position
 	struct region
 	{
 		region_kind kind;
-		int32_t start_frame;
+		disc_position start;
 		std::optional<uint32_t> frames;
 		region_presence main_data;
 		region_presence subcode;
@@ -128,7 +128,7 @@ struct disc_position
 	struct index
 	{
 		uint8_t number;
-		int32_t start_frame;
+		disc_position start;
 	};
 
 	struct disc_track
@@ -148,7 +148,7 @@ struct disc_position
 		uint8_t first_track;
 		uint8_t last_track;
 
-		int32_t program_start_frame;
+		disc_position program_start;
 
 		std::optional<region> lead_in;
 		std::optional<region> lead_out;
