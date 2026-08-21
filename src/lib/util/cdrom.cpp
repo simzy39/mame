@@ -1081,8 +1081,8 @@ bool cdrom_file::apply_q_toc_semantics(
     {
         region lead_out;
         lead_out.kind = region_kind::lead_out;
-        lead_out.start_frame =
-                int32_t(*semantics.start_frame);
+        lead_out.start =
+				disc_position{ int32_t(*semantics.start_frame) };
         lead_out.frames = std::nullopt;
         lead_out.main_data = region_presence::unknown;
         lead_out.subcode = region_presence::unknown;
@@ -1091,8 +1091,8 @@ bool cdrom_file::apply_q_toc_semantics(
     }
     else
     {
-        session_it->lead_out->start_frame =
-                int32_t(*semantics.start_frame);
+        session_it->lead_out->start =
+				disc_position{ int32_t(*semantics.start_frame) };
     }
 
     return true;
@@ -1122,17 +1122,17 @@ bool cdrom_file::apply_q_toc_semantics(
                         return entry.number == 1;
                     });
 
-                        const int32_t start_frame =
-                    int32_t(*semantics.start_frame);
+                        const disc_position start{
+								int32_t(*semantics.start_frame) };
 
             if (index_it == track_it->indexes.end())
             {
                 track_it->indexes.push_back(
-                        { 1, start_frame });
+						{ 1, start });
             }
             else
             {
-                index_it->start_frame = start_frame;
+                index_it->start = start;
             }
 
             auto program_it = std::find_if(
@@ -1144,10 +1144,10 @@ bool cdrom_file::apply_q_toc_semantics(
                     });
 
             if (program_it != track_it->regions.end())
-                program_it->start_frame = start_frame;
+                program_it->start = start;
 
             if (session_it->first_track == track_it->number)
-                session_it->program_start_frame = start_frame;
+                session_it->program_start = start;
 
             return true;
         }
@@ -1476,8 +1476,10 @@ cdrom_file::disc cdrom_file::get_disc() const
 		{
 			region pregap;
 			pregap.kind = region_kind::pregap;
-			pregap.start_frame =
-			int32_t(source.logframeofs) - int32_t(source.pregap);
+			pregap.start =
+					disc_position{
+							int32_t(source.logframeofs)
+								- int32_t(source.pregap) };
 			pregap.frames = source.pregap;
 			pregap.main_data =
 					source.pgdatasize
@@ -1496,7 +1498,8 @@ cdrom_file::disc cdrom_file::get_disc() const
 
 		region program;
 		program.kind = region_kind::program;
-		program.start_frame = source.logframeofs;
+		program.start =
+				disc_position{ int32_t(source.logframeofs) };
 		program.frames = program_frames;
 		program.main_data = region_presence::captured;
 		program.subcode =
@@ -1510,9 +1513,10 @@ cdrom_file::disc cdrom_file::get_disc() const
 		{
 			region postgap;
 			postgap.kind = region_kind::postgap;
-			postgap.start_frame =
-					int32_t(source.logframeofs)
-						+ int32_t(program_frames);
+			postgap.start =
+					disc_position{
+							int32_t(source.logframeofs)
+								+ int32_t(program_frames) };
 			postgap.frames = source.postgap;
 			postgap.main_data = region_presence::unknown;
 			postgap.subcode = region_presence::unknown;
@@ -1521,7 +1525,7 @@ cdrom_file::disc cdrom_file::get_disc() const
 		}
 
 		track.indexes.push_back(
-				{ 1, int32_t(source.logframeofs) });
+				{ 1, disc_position{ int32_t(source.logframeofs) } });
 
 		for (uint32_t indexnum = 2; indexnum <= MAX_INDEX; indexnum++)
 		{
@@ -1530,7 +1534,9 @@ cdrom_file::disc cdrom_file::get_disc() const
 			track.indexes.push_back(
 				{
 					uint8_t(indexnum),
-					int32_t(source.logframeofs) + source.idx[indexnum]
+					disc_position{
+							int32_t(source.logframeofs)
+								+ source.idx[indexnum] }
 				});
 		}
 		}
@@ -1563,8 +1569,9 @@ cdrom_file::disc cdrom_file::get_disc() const
 		session.number = sessionnum + 1;
 		session.first_track = first_track + 1;
 		session.last_track = last_track + 1;
-		session.program_start_frame =
-			cdtoc.tracks[first_track].logframeofs;
+		session.program_start =
+			disc_position{
+					int32_t(cdtoc.tracks[first_track].logframeofs) };
 
 		// The legacy TOC does not reliably retain actual session
 		// lead-in and lead-out positions.  Keep them unknown rather
