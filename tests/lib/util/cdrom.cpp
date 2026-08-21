@@ -40,6 +40,18 @@ static void interleave_q_raw(const uint8_t *q, uint8_t *sub)
 		sub[i] = ((q[i >> 3] >> (7 - (i & 7))) & 1) ? 0x40 : 0x00;
 }
 
+TEST_CASE("CD-ROM coordinate types remain distinct", "[util][cdrom]")
+{
+	cdrom_file::channel_position channel{ 1234, 7 };
+	cdrom_file::subcode_position subcode{ 5678 };
+	cdrom_file::disc_position disc{ 42 };
+
+	REQUIRE(channel.frame == 1234);
+	REQUIRE(channel.byte_offset == 7);
+	REQUIRE(subcode.frame == 5678);
+	REQUIRE(disc.frame == 42);
+}
+
 TEST_CASE("CD-ROM Q subchannel indexes", "[util][cdrom]")
 {
 	const std::filesystem::path tempdir =
