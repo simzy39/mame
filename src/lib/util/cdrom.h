@@ -84,6 +84,22 @@ public:
 		CD_FLAG_ADR_ISRC_CODE,
 	};
 
+struct channel_position
+{
+	int64_t frame;
+	uint8_t byte_offset;
+};
+
+struct subcode_position
+{
+	int64_t frame;
+};
+
+struct disc_position
+{
+	int32_t frame;
+};
+
 	enum class region_kind
 	{
 		lead_in,
