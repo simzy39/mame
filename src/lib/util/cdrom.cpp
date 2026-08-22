@@ -1524,19 +1524,21 @@ cdrom_file::disc cdrom_file::get_disc() const
 		
 		captured_position captured;
 
+		const int64_t program_physical_frame =
+				int64_t(source.physframeofs)
+					+ (source.pgdatasize
+							? int64_t(source.pregap)
+							: 0);
+		
 		captured.sector_data =
-				sector_position{
-						int64_t(source.physframeofs)
-							+ int64_t(source.pregap) };
+				sector_position{ program_physical_frame };
 		
 		if (source.subsize)
 		{
 			captured.subcode =
-					subcode_position{
-							int64_t(source.physframeofs)
-								+ int64_t(source.pregap) };
+					subcode_position{ program_physical_frame };
 		}
-
+		
 		program.captured = captured;
 
 		track.regions.push_back(program);
