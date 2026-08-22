@@ -1490,6 +1490,21 @@ cdrom_file::disc cdrom_file::get_disc() const
 						? region_presence::captured
 						: region_presence::unknown;
 
+		if (source.pgdatasize || source.pgsubsize)
+		{
+			captured_position captured;
+		
+			if (source.pgdatasize)
+				captured.sector_data =
+						sector_position{ int64_t(source.physframeofs) };
+		
+			if (source.pgsubsize)
+				captured.subcode =
+						subcode_position{ int64_t(source.physframeofs) };
+		
+			pregap.captured = captured;
+		}
+
 			track.regions.push_back(pregap);
 		}
 
@@ -1506,6 +1521,23 @@ cdrom_file::disc cdrom_file::get_disc() const
 				source.subsize
 					? region_presence::captured
 					: region_presence::unknown;
+		
+		captured_position captured;
+
+		captured.sector_data =
+				sector_position{
+						int64_t(source.physframeofs)
+							+ int64_t(source.pregap) };
+		
+		if (source.subsize)
+		{
+			captured.subcode =
+					subcode_position{
+							int64_t(source.physframeofs)
+								+ int64_t(source.pregap) };
+		}
+
+		program.captured = captured;
 
 		track.regions.push_back(program);
 
