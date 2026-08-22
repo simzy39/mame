@@ -84,6 +84,11 @@ public:
 		CD_FLAG_ADR_ISRC_CODE,
 	};
 
+	struct sector_position
+	{
+		int64_t frame;
+	};
+
 	struct channel_position
 	{
 		int64_t frame;
@@ -102,7 +107,8 @@ public:
 	
 	struct captured_position
 	{
-		std::optional<channel_position> main_data;
+		std::optional<sector_position> sector_data;
+		std::optional<channel_position> main_channel;
 		std::optional<subcode_position> subcode;
 	};
 
