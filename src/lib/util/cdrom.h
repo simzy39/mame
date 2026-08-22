@@ -124,11 +124,12 @@ public:
 
 	struct region
 	{
-		region_kind kind;
-		disc_position start;
-		std::optional<uint32_t> frames;
-		region_presence main_data;
-		region_presence subcode;
+	    region_kind kind;
+	    disc_position start;
+	    std::optional<uint32_t> frames;
+	    region_presence main_data;
+	    region_presence subcode;
+	    std::optional<captured_position> captured;
 	};
 
 	struct index
