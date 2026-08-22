@@ -84,21 +84,27 @@ public:
 		CD_FLAG_ADR_ISRC_CODE,
 	};
 
-struct channel_position
-{
-	int64_t frame;
-	uint8_t byte_offset;
-};
-
-struct subcode_position
-{
-	int64_t frame;
-};
-
-struct disc_position
-{
-	int32_t frame;
-};
+	struct channel_position
+	{
+		int64_t frame;
+		uint8_t byte_offset;
+	};
+	
+	struct subcode_position
+	{
+		int64_t frame;
+	};
+	
+	struct disc_position
+	{
+		int32_t frame;
+	};
+	
+	struct captured_position
+	{
+		std::optional<channel_position> main_data;
+		std::optional<subcode_position> subcode;
+	};
 
 	enum class region_kind
 	{
