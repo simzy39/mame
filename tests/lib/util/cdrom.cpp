@@ -555,11 +555,21 @@ TEST_CASE("CD-ROM canonical disc model distinguishes virtual and stored pregaps"
 		REQUIRE(*pregap.frames == 150);
 		REQUIRE(pregap.main_data == cdrom_file::region_presence::captured);
 		REQUIRE(pregap.start.frame == 0);
+		REQUIRE(pregap.captured.has_value());
+		REQUIRE(pregap.captured->sector_data.has_value());
+		REQUIRE(pregap.captured->sector_data->frame == 0);
+		REQUIRE_FALSE(pregap.captured->main_channel.has_value());
+		REQUIRE_FALSE(pregap.captured->subcode.has_value());
 
 		const auto &program = disc.tracks[0].regions[1];
 
 		REQUIRE(program.kind == cdrom_file::region_kind::program);
 		REQUIRE(program.start.frame == 150);
+		REQUIRE(program.captured.has_value());
+		REQUIRE(program.captured->sector_data.has_value());
+		REQUIRE(program.captured->sector_data->frame == 150);
+		REQUIRE_FALSE(program.captured->main_channel.has_value());
+		REQUIRE_FALSE(program.captured->subcode.has_value());
 
 		REQUIRE(disc.tracks[0].indexes.size() >= 1);
 		REQUIRE(disc.tracks[0].indexes[0].number == 1);
@@ -580,11 +590,17 @@ TEST_CASE("CD-ROM canonical disc model distinguishes virtual and stored pregaps"
 		REQUIRE(*pregap.frames == 150);
 		REQUIRE(pregap.main_data == cdrom_file::region_presence::unknown);
 		REQUIRE(pregap.start.frame == 0);
+		REQUIRE_FALSE(pregap.captured.has_value());
 
 		const auto &program = disc.tracks[0].regions[1];
 
 		REQUIRE(program.kind == cdrom_file::region_kind::program);
 		REQUIRE(program.start.frame == 150);
+		REQUIRE(program.captured.has_value());
+		REQUIRE(program.captured->sector_data.has_value());
+		REQUIRE(program.captured->sector_data->frame == 0);
+		REQUIRE_FALSE(program.captured->main_channel.has_value());
+		REQUIRE_FALSE(program.captured->subcode.has_value());
 
 		REQUIRE(disc.tracks[0].indexes.size() >= 1);
 		REQUIRE(disc.tracks[0].indexes[0].number == 1);
