@@ -42,30 +42,47 @@ static void interleave_q_raw(const uint8_t *q, uint8_t *sub)
 
 TEST_CASE("CD-ROM coordinate types remain distinct", "[util][cdrom]")
 {
+	cdrom_file::sector_position sector{ 321 };
 	cdrom_file::channel_position channel{ 1234, 7 };
 	cdrom_file::subcode_position subcode{ 5678 };
 	cdrom_file::disc_position disc{ 42 };
 
+	REQUIRE(sector.frame == 321);
 	REQUIRE(channel.frame == 1234);
 	REQUIRE(channel.byte_offset == 7);
 	REQUIRE(subcode.frame == 5678);
 	REQUIRE(disc.frame == 42);
 
-	cdrom_file::captured_position captured{
-			channel,
-			subcode };
-
-	REQUIRE(captured.main_data.has_value());
-	REQUIRE(captured.main_data->frame == 1234);
-	REQUIRE(captured.main_data->byte_offset == 7);
-	REQUIRE(captured.subcode.has_value());
-	REQUIRE(captured.subcode->frame == 5678);
-
-	cdrom_file::captured_position subcode_only{
+	cdrom_file::captured_position sector_backed{
+			sector,
 			std::nullopt,
 			subcode };
 
-	REQUIRE_FALSE(subcode_only.main_data.has_value());
+	REQUIRE(sector_backed.sector_data.has_value());
+	REQUIRE(sector_backed.sector_data->frame == 321);
+	REQUIRE_FALSE(sector_backed.main_channel.has_value());
+	REQUIRE(sector_backed.subcode.has_value());
+	REQUIRE(sector_backed.subcode->frame == 5678);
+
+	cdrom_file::captured_position channel_backed{
+			std::nullopt,
+			channel,
+			subcode };
+
+	REQUIRE_FALSE(channel_backed.sector_data.has_value());
+	REQUIRE(channel_backed.main_channel.has_value());
+	REQUIRE(channel_backed.main_channel->frame == 1234);
+	REQUIRE(channel_backed.main_channel->byte_offset == 7);
+	REQUIRE(channel_backed.subcode.has_value());
+	REQUIRE(channel_backed.subcode->frame == 5678);
+
+	cdrom_file::captured_position subcode_only{
+			std::nullopt,
+			std::nullopt,
+			subcode };
+
+	REQUIRE_FALSE(subcode_only.sector_data.has_value());
+	REQUIRE_FALSE(subcode_only.main_channel.has_value());
 	REQUIRE(subcode_only.subcode.has_value());
 	REQUIRE(subcode_only.subcode->frame == 5678);
 }
