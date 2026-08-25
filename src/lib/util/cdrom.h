@@ -372,6 +372,9 @@ public:
 	int get_track_type(int track) const { return cdtoc.tracks[track].trktype; }
 	const toc &get_toc() const { return cdtoc; }
 	disc get_disc() const;
+	static const backing_span *find_backing_span(
+			const region &region,
+			disc_position position);
 	void reconstruct_track_indexes();
 
 	/* extra utilities */
