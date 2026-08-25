@@ -377,6 +377,9 @@ public:
 	static std::optional<sector_position> backing_sector_position(
 			const region &region,
 			disc_position position);
+	static std::optional<subcode_position> backing_subcode_position(
+			const region &region,
+			disc_position position);
 	static bool validate_backing_spans(const region &region);
 	void reconstruct_track_indexes();
 
