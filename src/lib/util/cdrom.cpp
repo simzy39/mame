@@ -1503,6 +1503,12 @@ cdrom_file::disc cdrom_file::get_disc() const
 						subcode_position{ int64_t(source.physframeofs) };
 		
 			pregap.captured = captured;
+			pregap.backing.push_back(
+		{
+			pregap.start,
+			pregap.frames,
+			captured
+		});
 		}
 
 			track.regions.push_back(pregap);
@@ -1540,6 +1546,12 @@ cdrom_file::disc cdrom_file::get_disc() const
 		}
 		
 		program.captured = captured;
+		program.backing.push_back(
+		{
+			program.start,
+			program.frames,
+			captured
+		});
 
 		track.regions.push_back(program);
 
