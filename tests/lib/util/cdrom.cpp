@@ -1249,6 +1249,88 @@ TEST_CASE("CD-ROM canonical sector reads do not double-apply stored pregap", "[u
 	std::filesystem::remove_all(tempdir);
 }
 
+TEST_CASE("CD-ROM canonical subcode reads do not double-apply stored pregap", "[util][cdrom]")
+{
+	const std::filesystem::path tempdir =
+			std::filesystem::temp_directory_path() / "mame-cdrom-canonical-stored-pregap-subcode-test";
+	const std::filesystem::path binpath = tempdir / "stored.bin";
+	const std::filesystem::path cuepath = tempdir / "stored.cue";
+
+	std::filesystem::remove_all(tempdir);
+	std::filesystem::create_directories(tempdir);
+
+	{
+		std::ofstream bin(binpath, std::ios::binary);
+		std::array<uint8_t, 2352> sector{};
+
+		for (int frame = 0; frame < 300; frame++)
+		{
+			uint8_t q[12] =
+			{
+				0x01,
+				0x01,
+				0x01,
+				0x00, 0x00, uint8_t(frame),
+				0x00,
+				0x00, 0x00, uint8_t(frame),
+				0x00, 0x00
+			};
+
+			const uint16_t crc = reference_q_crc(q);
+			q[10] = uint8_t(crc >> 8);
+			q[11] = uint8_t(crc);
+
+			uint8_t subcode[96];
+			interleave_q_raw(q, subcode);
+
+			bin.write(
+					reinterpret_cast<const char *>(sector.data()),
+					sector.size());
+			bin.write(
+					reinterpret_cast<const char *>(subcode),
+					sizeof(subcode));
+		}
+	}
+
+	{
+		std::ofstream cue(cuepath);
+		cue <<
+				"FILE \"stored.bin\" BINARY\n"
+				"  TRACK 01 AUDIO RW_RAW\n"
+				"    INDEX 00 00:00:00\n"
+				"    INDEX 01 00:02:00\n";
+	}
+
+	cdrom_file cd(cuepath.string());
+
+	uint8_t subcode[96];
+	uint8_t q[12];
+
+	// The first stored pregap subcode is backing frame 0.
+	REQUIRE(cd.get_subcode_raw(0, subcode));
+	cdrom_file::unpack_subcode_q(subcode, q);
+	REQUIRE(q[5] == uint8_t(0));
+	REQUIRE(q[9] == uint8_t(0));
+	require_valid_q_crc(q);
+
+	// INDEX 01 is logical frame 150 and is backed by subcode frame 150.
+	// It must not have the 150-frame pregap applied a second time.
+	REQUIRE(cd.get_subcode_raw(150, subcode));
+	cdrom_file::unpack_subcode_q(subcode, q);
+	REQUIRE(q[5] == uint8_t(150));
+	REQUIRE(q[9] == uint8_t(150));
+	require_valid_q_crc(q);
+
+	// Check another program-area frame so the mapping is demonstrably linear.
+	REQUIRE(cd.get_subcode_raw(151, subcode));
+	cdrom_file::unpack_subcode_q(subcode, q);
+	REQUIRE(q[5] == uint8_t(151));
+	REQUIRE(q[9] == uint8_t(151));
+	require_valid_q_crc(q);
+
+	std::filesystem::remove_all(tempdir);
+}
+
 TEST_CASE("CD-ROM Q subchannel later-track stored pregap", "[util][cdrom]")
 {
 	const std::filesystem::path tempdir =
