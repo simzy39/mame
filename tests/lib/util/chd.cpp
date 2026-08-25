@@ -667,6 +667,140 @@ TEST_CASE("CD CHD reconstructs later-track index relative to stored pregap", "[u
 	chd.close();
 	std::filesystem::remove_all(tempdir);
 }
+TEST_CASE("CD CHD canonical backing ignores CHD track padding", "[util][chd][cdrom]")
+{
+	const std::filesystem::path tempdir =
+			std::filesystem::temp_directory_path() / "mame-chd-cd-canonical-padding-test";
+	const std::filesystem::path chdpath = tempdir / "padding.chd";
+
+	std::filesystem::remove_all(tempdir);
+	std::filesystem::create_directories(tempdir);
+
+	constexpr uint32_t track1_frames = 3;
+	constexpr uint32_t track1_padding = 1;
+	constexpr uint32_t track2_frames = 4;
+
+	constexpr uint32_t physical_frames =
+			track1_frames + track2_frames;
+	constexpr uint32_t chd_frames =
+			physical_frames + track1_padding;
+
+	constexpr uint32_t hunk_bytes =
+			cdrom_file::FRAME_SIZE * cdrom_file::FRAMES_PER_HUNK;
+
+	const chd_codec_type compression[4] =
+	{
+		CHD_CODEC_NONE,
+		CHD_CODEC_NONE,
+		CHD_CODEC_NONE,
+		CHD_CODEC_NONE
+	};
+
+	chd_file chd;
+
+	REQUIRE_FALSE(chd.create(
+			chdpath.string(),
+			uint64_t(chd_frames) * cdrom_file::FRAME_SIZE,
+			hunk_bytes,
+			cdrom_file::FRAME_SIZE,
+			compression));
+
+	cdrom_file::toc toc{};
+	toc.numtrks = 2;
+	toc.numsessions = 1;
+
+	for (uint32_t tracknum = 0; tracknum < 2; tracknum++)
+	{
+		cdrom_file::track_info &track = toc.tracks[tracknum];
+
+		track.trktype = cdrom_file::CD_TRACK_AUDIO;
+		track.subtype = cdrom_file::CD_SUB_RAW;
+		track.datasize = cdrom_file::MAX_SECTOR_DATA;
+		track.subsize = cdrom_file::MAX_SUBCODE_DATA;
+		track.frames =
+				(tracknum == 0)
+					? track1_frames
+					: track2_frames;
+		track.extraframes =
+				(tracknum == 0)
+					? track1_padding
+					: 0;
+		track.pregap = 0;
+		track.postgap = 0;
+		track.pgtype = cdrom_file::CD_TRACK_AUDIO;
+		track.pgsub = cdrom_file::CD_SUB_NONE;
+		track.pgdatasize = 0;
+		track.pgsubsize = 0;
+		track.control_flags = 0;
+		track.session = 0;
+
+		std::fill(std::begin(track.idx), std::end(track.idx), -1);
+	}
+
+	REQUIRE_FALSE(cdrom_file::write_metadata(&chd, toc));
+
+	std::vector<uint8_t> frame(cdrom_file::FRAME_SIZE, 0);
+
+	for (uint32_t chd_frame = 0; chd_frame < chd_frames; chd_frame++)
+		REQUIRE_FALSE(chd.write_units(chd_frame, frame.data()));
+
+	cdrom_file cd(&chd);
+
+	const cdrom_file::toc &after = cd.get_toc();
+
+	// Track 1 occupies physical frames 0-2.  CHD frame 3 is padding,
+	// so Track 2 starts at physical frame 3 but CHD frame 4.
+	REQUIRE(after.tracks[0].physframeofs == 0);
+	REQUIRE(after.tracks[0].chdframeofs == 0);
+	REQUIRE(after.tracks[0].extraframes == track1_padding);
+
+	REQUIRE(after.tracks[1].physframeofs == track1_frames);
+	REQUIRE(after.tracks[1].chdframeofs == track1_frames + track1_padding);
+
+	REQUIRE(after.tracks[1].physframeofs != after.tracks[1].chdframeofs);
+
+	const cdrom_file::disc disc = cd.get_disc();
+
+	REQUIRE(disc.tracks.size() == 2);
+	REQUIRE(disc.tracks[1].regions.size() == 1);
+
+	const cdrom_file::region &track2_program =
+			disc.tracks[1].regions[0];
+
+	REQUIRE(track2_program.kind == cdrom_file::region_kind::program);
+
+	// Canonical disc position follows the physical disc, not CHD padding.
+	REQUIRE(track2_program.start.frame == int32_t(track1_frames));
+
+	REQUIRE(track2_program.captured.has_value());
+
+	REQUIRE(track2_program.captured->sector_data.has_value());
+	REQUIRE(
+			track2_program.captured->sector_data->frame
+				== int64_t(track1_frames));
+
+	REQUIRE_FALSE(track2_program.captured->main_channel.has_value());
+
+	REQUIRE(track2_program.captured->subcode.has_value());
+	REQUIRE(
+			track2_program.captured->subcode->frame
+				== int64_t(track1_frames));
+
+	// In particular, neither canonical coordinate may use Track 2's
+	// padded CHD frame offset of 4.
+	REQUIRE(
+			track2_program.start.frame
+				!= int32_t(after.tracks[1].chdframeofs));
+	REQUIRE(
+			track2_program.captured->sector_data->frame
+				!= int64_t(after.tracks[1].chdframeofs));
+	REQUIRE(
+			track2_program.captured->subcode->frame
+				!= int64_t(after.tracks[1].chdframeofs));
+
+	chd.close();
+	std::filesystem::remove_all(tempdir);
+}
 
 TEST_CASE("CD CHD reconstructs one-frame monotonic index from stored Q", "[util][chd][cdrom]")
 {
