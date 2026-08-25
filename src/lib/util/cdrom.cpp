@@ -1230,16 +1230,31 @@ bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) c
 		}
 	}
 
-const track_info &track = cdtoc.tracks[tracknum];
+		const track_info &track = cdtoc.tracks[tracknum];
 
-		const bool virtual_pregap =
-			!phys
-				&& (track.pgdatasize == 0)
-				&& (lbasector < track.logframeofs);
+		bool uncaptured_pregap = false;
+
+		if (!phys)
+		{
+			const disc_position position{ int32_t(lbasector) };
+			const disc_track *const canonical_track =
+					find_track(m_disc, position);
+		
+			if (canonical_track)
+			{
+				const region *const canonical_region =
+						find_region(*canonical_track, position);
+		
+				uncaptured_pregap =
+						canonical_region
+							&& canonical_region->kind == region_kind::pregap
+							&& canonical_region->subcode != region_presence::captured;
+			}
+		}
 
 	// Captured subcode is authoritative.  Return captured Q without
 	// validating or replacing it.
-		if (!virtual_pregap && track.subsize == 96)
+		if (!uncaptured_pregap && track.subsize == 96)
 	{
 		uint8_t subcode[96];
 
@@ -1254,7 +1269,7 @@ const track_info &track = cdtoc.tracks[tracknum];
 	}
 
 	// Never synthesize Q over captured subcode that we cannot decode.
-		if (!virtual_pregap && track.subsize != 0)
+		if (!uncaptured_pregap && track.subsize != 0)
 		return false;
 
 	const uint32_t track_start =
