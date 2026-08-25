@@ -1231,8 +1231,6 @@ bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) c
 				&& canonical_region
 				&& canonical_region->kind == region_kind::pregap
 				&& canonical_region->subcode != region_presence::captured;
-			}
-		}
 
 	// Captured subcode is authoritative.  Return captured Q without
 	// validating or replacing it.
