@@ -372,6 +372,7 @@ public:
 	const toc &get_toc() const { return cdtoc; }
 
 	disc get_disc() const;
+	disc build_disc() const;
 
 	static const disc_track *find_track(
 			const disc &disc,
