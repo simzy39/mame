@@ -201,6 +201,48 @@ TEST_CASE("CD-ROM region supports multiple backing spans", "[util][cdrom]")
 	REQUIRE(
 			cdrom_file::find_backing_span(open_ended, { 5000 })
 				== &open_ended.backing[0]);
+
+	REQUIRE(cdrom_file::validate_backing_spans(program));
+	REQUIRE(cdrom_file::validate_backing_spans(open_ended));
+
+	cdrom_file::region overlap = program;
+	overlap.backing[1].start = { 1050 };
+	REQUIRE_FALSE(cdrom_file::validate_backing_spans(overlap));
+
+	cdrom_file::region zero_length = program;
+	zero_length.backing[0].frames = 0;
+	REQUIRE_FALSE(cdrom_file::validate_backing_spans(zero_length));
+
+	cdrom_file::region before_region = program;
+	before_region.backing[0].start = { 999 };
+	REQUIRE_FALSE(cdrom_file::validate_backing_spans(before_region));
+
+	cdrom_file::region past_region = program;
+	past_region.backing[1].start = { 1150 };
+	past_region.backing[1].frames = 100;
+	REQUIRE_FALSE(cdrom_file::validate_backing_spans(past_region));
+
+	cdrom_file::region finite_open_ended = program;
+	finite_open_ended.backing[1].frames = std::nullopt;
+	REQUIRE_FALSE(cdrom_file::validate_backing_spans(finite_open_ended));
+
+	cdrom_file::region open_ended_not_last = open_ended;
+	open_ended_not_last.backing.push_back(
+			{
+				{ 3000 },
+				100,
+				{
+					cdrom_file::sector_position{ 1900 },
+					std::nullopt,
+					std::nullopt
+				}
+			});
+	REQUIRE_FALSE(cdrom_file::validate_backing_spans(open_ended_not_last));
+
+		cdrom_file::region with_gap = program;
+	with_gap.backing[0].frames = 50;
+	with_gap.backing[1].start = { 1100 };
+	REQUIRE(cdrom_file::validate_backing_spans(with_gap));
 }
 
 TEST_CASE("CD-ROM Q subchannel indexes", "[util][cdrom]")
