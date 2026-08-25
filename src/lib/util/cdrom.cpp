@@ -469,7 +469,6 @@ std::error_condition cdrom_file::read_partial_sector(void *dest, uint32_t lbasec
 
 bool cdrom_file::read_data(uint32_t lbasector, void *buffer, uint32_t datatype, bool phys)
 {
-	// compute CHD sector and tracknumber
 	uint32_t tracknum = 0;
 	uint32_t chdsector;
 
@@ -479,7 +478,23 @@ bool cdrom_file::read_data(uint32_t lbasector, void *buffer, uint32_t datatype, 
 	}
 	else
 	{
-		chdsector = logical_to_chd_lba(lbasector, tracknum);
+		const disc_position position{ int32_t(lbasector) };
+		const disc_track *const canonical_track =
+				find_track(m_disc, position);
+		const std::optional<sector_position> backing =
+				backing_sector_position(m_disc, position);
+
+		if (!canonical_track || !backing)
+			return false;
+
+		if (backing->frame < 0)
+			return false;
+
+		tracknum = canonical_track->number - 1;
+		chdsector =
+				physical_to_chd_lba(
+						uint32_t(backing->frame),
+						tracknum);
 	}
 
 	// copy out the requested sector
@@ -488,14 +503,14 @@ bool cdrom_file::read_data(uint32_t lbasector, void *buffer, uint32_t datatype, 
 	if ((datatype == tracktype) || (datatype == CD_TRACK_RAW_DONTCARE))
 	{
 		assert(cdtoc.tracks[tracknum].datasize != 0);
-		return !read_partial_sector(buffer, lbasector, chdsector, tracknum, 0, cdtoc.tracks[tracknum].datasize, phys);
+		return !read_partial_sector(buffer, lbasector, chdsector, tracknum, 0, cdtoc.tracks[tracknum].datasize, true);
 	}
 	else
 	{
 		// return 2048 bytes of mode 1 data from a 2352 byte mode 1 raw sector
 		if ((datatype == CD_TRACK_MODE1) && (tracktype == CD_TRACK_MODE1_RAW))
 		{
-			return !read_partial_sector(buffer, lbasector, chdsector, tracknum, 16, 2048, phys);
+			return !read_partial_sector(buffer, lbasector, chdsector, tracknum, 16, 2048, true);
 		}
 
 		// return 2352 byte mode 1 raw sector from 2048 bytes of mode 1 data
@@ -509,25 +524,25 @@ bool cdrom_file::read_data(uint32_t lbasector, void *buffer, uint32_t datatype, 
 			put_u24be(&bufptr[12], msf);
 			bufptr[15] = 1; // mode 1
 			LOG(("CDROM: promotion of mode1/form1 sector to mode1 raw is not complete!\n"));
-			return !read_partial_sector(bufptr+16, lbasector, chdsector, tracknum, 0, 2048, phys);
+			return !read_partial_sector(bufptr+16, lbasector, chdsector, tracknum, 0, 2048, true);
 		}
 
 		// return 2048 bytes of mode 1 data from a mode2 form1 or raw sector
 		if ((datatype == CD_TRACK_MODE1) && ((tracktype == CD_TRACK_MODE2_FORM1)||(tracktype == CD_TRACK_MODE2_RAW)))
 		{
-			return !read_partial_sector(buffer, lbasector, chdsector, tracknum, 24, 2048, phys);
+			return !read_partial_sector(buffer, lbasector, chdsector, tracknum, 24, 2048, true);
 		}
 
 		// return 2048 bytes of mode 1 data from a mode2 form2 or XA sector
 		if ((datatype == CD_TRACK_MODE1) && (tracktype == CD_TRACK_MODE2_FORM_MIX))
 		{
-			return !read_partial_sector(buffer, lbasector, chdsector, tracknum, 8, 2048, phys);
+			return !read_partial_sector(buffer, lbasector, chdsector, tracknum, 8, 2048, true);
 		}
 
 		// return mode 2 2336 byte data from a 2352 byte mode 1 or 2 raw sector (skip the header)
 		if ((datatype == CD_TRACK_MODE2) && ((tracktype == CD_TRACK_MODE1_RAW) || (tracktype == CD_TRACK_MODE2_RAW)))
 		{
-			return !read_partial_sector(buffer, lbasector, chdsector, tracknum, 16, 2336, phys);
+			return !read_partial_sector(buffer, lbasector, chdsector, tracknum, 16, 2336, true);
 		}
 
 		LOG(("CDROM: Conversion from type %d to type %d not supported!\n", tracktype, datatype));
