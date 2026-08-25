@@ -370,7 +370,12 @@ public:
 	}
 	int get_track_type(int track) const { return cdtoc.tracks[track].trktype; }
 	const toc &get_toc() const { return cdtoc; }
+
 	disc get_disc() const;
+
+	static const disc_track *find_track(
+			const disc &disc,
+			disc_position position);
 	static const region *find_region(
 			const disc_track &track,
 			disc_position position);
