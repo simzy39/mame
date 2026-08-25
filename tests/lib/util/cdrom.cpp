@@ -1183,6 +1183,72 @@ TEST_CASE("CD-ROM canonical disc model distinguishes virtual and stored pregaps"
 	std::filesystem::remove_all(tempdir);
 }
 
+TEST_CASE("CD-ROM canonical sector reads do not double-apply stored pregap", "[util][cdrom]")
+{
+	const std::filesystem::path tempdir =
+			std::filesystem::temp_directory_path() / "mame-cdrom-canonical-stored-pregap-read-test";
+	const std::filesystem::path binpath = tempdir / "stored.bin";
+	const std::filesystem::path cuepath = tempdir / "stored.cue";
+
+	std::filesystem::remove_all(tempdir);
+	std::filesystem::create_directories(tempdir);
+
+	{
+		std::ofstream bin(binpath, std::ios::binary);
+		std::array<uint8_t, 2352> sector{};
+
+		for (int frame = 0; frame < 300; frame++)
+		{
+			sector.fill(uint8_t(frame));
+			bin.write(
+					reinterpret_cast<const char *>(sector.data()),
+					sector.size());
+		}
+	}
+
+	{
+		std::ofstream cue(cuepath);
+		cue <<
+				"FILE \"stored.bin\" BINARY\n"
+				"  TRACK 01 AUDIO\n"
+				"    INDEX 00 00:00:00\n"
+				"    INDEX 01 00:02:00\n";
+	}
+
+	cdrom_file cd(cuepath.string());
+	std::array<uint8_t, 2352> sector{};
+
+	// The first stored pregap sector is backing frame 0.
+	REQUIRE(cd.read_data(
+			0,
+			sector.data(),
+			cdrom_file::CD_TRACK_AUDIO));
+
+	REQUIRE(sector[0] == 0);
+	REQUIRE(sector[2351] == 0);
+
+	// INDEX 01 is logical frame 150 and is backed by source frame 150.
+	// It must not have the 150-frame pregap applied a second time.
+	REQUIRE(cd.read_data(
+			150,
+			sector.data(),
+			cdrom_file::CD_TRACK_AUDIO));
+
+	REQUIRE(sector[0] == uint8_t(150));
+	REQUIRE(sector[2351] == uint8_t(150));
+
+	// Check another program-area frame so the mapping is demonstrably linear.
+	REQUIRE(cd.read_data(
+			151,
+			sector.data(),
+			cdrom_file::CD_TRACK_AUDIO));
+
+	REQUIRE(sector[0] == uint8_t(151));
+	REQUIRE(sector[2351] == uint8_t(151));
+
+	std::filesystem::remove_all(tempdir);
+}
+
 TEST_CASE("CD-ROM Q subchannel later-track stored pregap", "[util][cdrom]")
 {
 	const std::filesystem::path tempdir =
