@@ -514,6 +514,16 @@ TEST_CASE("CD-ROM raw subcode later-track virtual pregap", "[util][cdrom]")
 	REQUIRE(track1_program.captured->subcode.has_value());
 	REQUIRE(track1_program.captured->subcode->frame == 0);
 
+	REQUIRE(track1_program.backing.size() == 1);
+	REQUIRE(track1_program.backing[0].start.frame == 0);
+	REQUIRE(track1_program.backing[0].frames.has_value());
+	REQUIRE(*track1_program.backing[0].frames == 225);
+	REQUIRE(track1_program.backing[0].captured.sector_data.has_value());
+	REQUIRE(track1_program.backing[0].captured.sector_data->frame == 0);
+	REQUIRE_FALSE(track1_program.backing[0].captured.main_channel.has_value());
+	REQUIRE(track1_program.backing[0].captured.subcode.has_value());
+	REQUIRE(track1_program.backing[0].captured.subcode->frame == 0);
+
 	const cdrom_file::disc_track &track2 = disc.tracks[1];
 	REQUIRE(track2.regions.size() >= 2);
 
@@ -521,6 +531,7 @@ TEST_CASE("CD-ROM raw subcode later-track virtual pregap", "[util][cdrom]")
 	REQUIRE(track2_pregap.kind == cdrom_file::region_kind::pregap);
 	REQUIRE(track2_pregap.subcode == cdrom_file::region_presence::unknown);
 	REQUIRE_FALSE(track2_pregap.captured.has_value());
+	REQUIRE(track2_pregap.backing.empty());
 
 	const cdrom_file::region &track2_program = track2.regions[1];
 	REQUIRE(track2_program.kind == cdrom_file::region_kind::program);
@@ -530,6 +541,15 @@ TEST_CASE("CD-ROM raw subcode later-track virtual pregap", "[util][cdrom]")
 	REQUIRE(track2_program.captured->sector_data->frame == 225);
 	REQUIRE_FALSE(track2_program.captured->main_channel.has_value());
 	REQUIRE_FALSE(track2_program.captured->subcode.has_value());
+
+	REQUIRE(track2_program.backing.size() == 1);
+	REQUIRE(track2_program.backing[0].start.frame == 375);
+	REQUIRE(track2_program.backing[0].frames.has_value());
+	REQUIRE(*track2_program.backing[0].frames == 150);
+	REQUIRE(track2_program.backing[0].captured.sector_data.has_value());
+	REQUIRE(track2_program.backing[0].captured.sector_data->frame == 225);
+	REQUIRE_FALSE(track2_program.backing[0].captured.main_channel.has_value());
+	REQUIRE_FALSE(track2_program.backing[0].captured.subcode.has_value());
 	
 	uint8_t subcode[96];
 	uint8_t q[12];
