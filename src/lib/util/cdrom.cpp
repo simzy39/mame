@@ -1502,7 +1502,6 @@ cdrom_file::disc cdrom_file::get_disc() const
 				captured.subcode =
 						subcode_position{ int64_t(source.physframeofs) };
 		
-			pregap.captured = captured;
 			pregap.backing.push_back(
 		{
 			pregap.start,
@@ -1545,7 +1544,6 @@ cdrom_file::disc cdrom_file::get_disc() const
 					subcode_position{ program_physical_frame };
 		}
 		
-		program.captured = captured;
 		program.backing.push_back(
 		{
 			program.start,
