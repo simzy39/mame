@@ -1458,6 +1458,11 @@ uint32_t cdrom_file::get_track_index(uint32_t frame) const
 	return get_track_index(trackinfo, frame - track_start);
 }
 
+const cdrom_file::disc &cdrom_file::get_disc() const
+{
+	return m_disc;
+}
+
 cdrom_file::disc cdrom_file::build_disc() const
 {
 	disc result;
