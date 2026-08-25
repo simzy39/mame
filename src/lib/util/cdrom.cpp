@@ -229,6 +229,8 @@ cdrom_file::cdrom_file(std::string_view inputfile)
 	track.logframeofs = logofs;
 	track.chdframeofs = 0;
 	track.logframes = 0;
+
+	m_disc = get_disc();
 }
 
 /*-------------------------------------------------
