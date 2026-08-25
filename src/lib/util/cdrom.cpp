@@ -1202,31 +1202,33 @@ bool cdrom_file::make_subcode_q_position(
 
 bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) const
 {
-	uint32_t tracknum = 0;
+		uint32_t tracknum = 0;
 
-if (phys)
-{
-	physical_to_chd_lba(lbasector, tracknum);
-}
-else
-{
-	logical_to_chd_lba(lbasector, tracknum);
-
-	// A virtual pregap belongs to the upcoming track even though INDEX 01
-	// has not been reached yet.
-	if (tracknum + 1 < cdtoc.numtrks)
+	if (phys)
 	{
-		const track_info &next_track = cdtoc.tracks[tracknum + 1];
+		physical_to_chd_lba(lbasector, tracknum);
+	}
+	else
+	{
+		logical_to_chd_lba(lbasector, tracknum);
 
-		if (next_track.pgdatasize == 0
-				&& next_track.pregap != 0
-				&& lbasector >= next_track.logframeofs - next_track.pregap
-				&& lbasector < next_track.logframeofs)
+		const disc_position position{ int32_t(lbasector) };
+		const disc_track *const canonical_track =
+				find_track(m_disc, position);
+
+		if (canonical_track)
 		{
-			tracknum++;
+			const region *const canonical_region =
+					find_region(*canonical_track, position);
+
+			if (canonical_region
+					&& canonical_region->kind == region_kind::pregap
+					&& canonical_region->main_data != region_presence::captured)
+			{
+				tracknum = canonical_track->number - 1;
+			}
 		}
 	}
-}
 
 const track_info &track = cdtoc.tracks[tracknum];
 
