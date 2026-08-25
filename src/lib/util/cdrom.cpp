@@ -1631,6 +1631,29 @@ cdrom_file::disc cdrom_file::get_disc() const
 	return result;
 }
 
+const cdrom_file::backing_span *cdrom_file::find_backing_span(
+		const region &region,
+		disc_position position)
+{
+	for (const backing_span &span : region.backing)
+	{
+		if (position.frame < span.start.frame)
+			continue;
+
+		if (!span.frames.has_value())
+			return &span;
+
+		const int64_t end =
+				int64_t(span.start.frame)
+					+ int64_t(*span.frames);
+
+		if (int64_t(position.frame) < end)
+			return &span;
+	}
+
+	return nullptr;
+}
+
 void cdrom_file::reconstruct_track_indexes()
 {
 	if (chd == nullptr)
