@@ -107,6 +107,56 @@ TEST_CASE("CD-ROM coordinate types remain distinct", "[util][cdrom]")
 	REQUIRE(span.captured.subcode->frame == 700);
 }
 
+TEST_CASE("CD-ROM region supports multiple backing spans", "[util][cdrom]")
+{
+	cdrom_file::region program;
+	program.kind = cdrom_file::region_kind::program;
+	program.start = { 1000 };
+	program.frames = 200;
+	program.main_data = cdrom_file::region_presence::captured;
+	program.subcode = cdrom_file::region_presence::captured;
+
+	program.backing.push_back(
+			{
+				{ 1000 },
+				100,
+				{
+					cdrom_file::sector_position{ 500 },
+					std::nullopt,
+					cdrom_file::subcode_position{ 700 }
+				}
+			});
+
+	program.backing.push_back(
+			{
+				{ 1100 },
+				100,
+				{
+					cdrom_file::sector_position{ 600 },
+					std::nullopt,
+					cdrom_file::subcode_position{ 799 }
+				}
+			});
+
+	REQUIRE(program.backing.size() == 2);
+
+	REQUIRE(program.backing[0].start.frame == 1000);
+	REQUIRE(program.backing[0].frames.has_value());
+	REQUIRE(*program.backing[0].frames == 100);
+	REQUIRE(program.backing[0].captured.sector_data.has_value());
+	REQUIRE(program.backing[0].captured.sector_data->frame == 500);
+	REQUIRE(program.backing[0].captured.subcode.has_value());
+	REQUIRE(program.backing[0].captured.subcode->frame == 700);
+
+	REQUIRE(program.backing[1].start.frame == 1100);
+	REQUIRE(program.backing[1].frames.has_value());
+	REQUIRE(*program.backing[1].frames == 100);
+	REQUIRE(program.backing[1].captured.sector_data.has_value());
+	REQUIRE(program.backing[1].captured.sector_data->frame == 600);
+	REQUIRE(program.backing[1].captured.subcode.has_value());
+	REQUIRE(program.backing[1].captured.subcode->frame == 799);
+}
+
 TEST_CASE("CD-ROM Q subchannel indexes", "[util][cdrom]")
 {
 	const std::filesystem::path tempdir =
