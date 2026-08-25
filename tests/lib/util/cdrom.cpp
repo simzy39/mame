@@ -309,6 +309,61 @@ TEST_CASE("CD-ROM region supports multiple backing spans", "[util][cdrom]")
 	subcode = cdrom_file::backing_subcode_position(no_subcode, { 1100 });
 	REQUIRE(subcode.has_value());
 	REQUIRE(subcode->frame == 799);
+
+		cdrom_file::region channel_program = program;
+	channel_program.backing[0].captured.main_channel =
+			cdrom_file::channel_position{ 800, 12 };
+	channel_program.backing[1].captured.main_channel =
+			cdrom_file::channel_position{ 900, 34 };
+
+	REQUIRE_FALSE(
+			cdrom_file::backing_channel_position(
+					channel_program, { 999 }).has_value());
+
+	auto channel =
+			cdrom_file::backing_channel_position(
+					channel_program, { 1000 });
+	REQUIRE(channel.has_value());
+	REQUIRE(channel->frame == 800);
+	REQUIRE(channel->byte_offset == 12);
+
+	channel =
+			cdrom_file::backing_channel_position(
+					channel_program, { 1099 });
+	REQUIRE(channel.has_value());
+	REQUIRE(channel->frame == 899);
+	REQUIRE(channel->byte_offset == 12);
+
+	channel =
+			cdrom_file::backing_channel_position(
+					channel_program, { 1100 });
+	REQUIRE(channel.has_value());
+	REQUIRE(channel->frame == 900);
+	REQUIRE(channel->byte_offset == 34);
+
+	channel =
+			cdrom_file::backing_channel_position(
+					channel_program, { 1199 });
+	REQUIRE(channel.has_value());
+	REQUIRE(channel->frame == 999);
+	REQUIRE(channel->byte_offset == 34);
+
+	REQUIRE_FALSE(
+			cdrom_file::backing_channel_position(
+					channel_program, { 1200 }).has_value());
+
+	channel_program.backing[0].captured.main_channel = std::nullopt;
+
+	REQUIRE_FALSE(
+			cdrom_file::backing_channel_position(
+					channel_program, { 1000 }).has_value());
+
+	channel =
+			cdrom_file::backing_channel_position(
+					channel_program, { 1100 });
+	REQUIRE(channel.has_value());
+	REQUIRE(channel->frame == 900);
+	REQUIRE(channel->byte_offset == 34);
 }
 
 TEST_CASE("CD-ROM Q subchannel indexes", "[util][cdrom]")
