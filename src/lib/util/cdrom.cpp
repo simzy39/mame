@@ -1668,6 +1668,23 @@ std::optional<cdrom_file::sector_position> cdrom_file::backing_sector_position(
 	};
 }
 
+std::optional<cdrom_file::channel_position> cdrom_file::backing_channel_position(
+		const region &region,
+		disc_position position)
+{
+	const backing_span *const span = find_backing_span(region, position);
+	if (!span || !span->captured.main_channel.has_value())
+		return std::nullopt;
+
+	const int64_t offset =
+			int64_t(position.frame) - int64_t(span->start.frame);
+
+	return channel_position{
+			span->captured.main_channel->frame + offset,
+			span->captured.main_channel->byte_offset
+	};
+}
+
 std::optional<cdrom_file::subcode_position> cdrom_file::backing_subcode_position(
 		const region &region,
 		disc_position position)
