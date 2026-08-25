@@ -509,6 +509,8 @@ private:
 	chd_file *           chd;                /* CHD file */
 	/** @brief  The cdtoc. */
 	toc                  cdtoc;              /* TOC for the CD */
+	/** @brief  The canonical disc model. */
+	disc                 m_disc;             /* canonical disc model */
 	/** @brief  Information describing the track. */
 	track_input_info     cdtrack_info;       /* track info */
 	/** @brief  The fhandle[ CD maximum tracks]. */
