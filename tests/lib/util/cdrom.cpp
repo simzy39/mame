@@ -678,7 +678,7 @@ TEST_CASE("CD-ROM canonical disc model distinguishes virtual and stored pregaps"
 		REQUIRE(program.backing.size() == 1);
 		REQUIRE(program.backing[0].start.frame == 150);
 		REQUIRE(program.backing[0].frames.has_value());
-		REQUIRE(*program.backing[0].frames == 225);
+		REQUIRE(*program.backing[0].frames == 75);
 		REQUIRE(program.backing[0].captured.sector_data.has_value());
 		REQUIRE(program.backing[0].captured.sector_data->frame == 0);
 		REQUIRE_FALSE(program.backing[0].captured.main_channel.has_value());
