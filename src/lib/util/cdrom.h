@@ -377,6 +377,9 @@ public:
 	static std::optional<sector_position> backing_sector_position(
 			const region &region,
 			disc_position position);
+	static std::optional<channel_position> backing_channel_position(
+			const region &region,
+			disc_position position);
 	static std::optional<subcode_position> backing_subcode_position(
 			const region &region,
 			disc_position position);
