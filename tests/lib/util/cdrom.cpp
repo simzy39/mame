@@ -364,6 +364,56 @@ TEST_CASE("CD-ROM region supports multiple backing spans", "[util][cdrom]")
 	REQUIRE(channel.has_value());
 	REQUIRE(channel->frame == 900);
 	REQUIRE(channel->byte_offset == 34);
+
+		cdrom_file::disc_track lookup_track;
+	lookup_track.regions.push_back(
+			{
+				cdrom_file::region_kind::pregap,
+				{ 900 },
+				100,
+				cdrom_file::region_presence::unknown,
+				cdrom_file::region_presence::unknown,
+				{}
+			});
+	lookup_track.regions.push_back(program);
+
+	const cdrom_file::region *found_region;
+
+	found_region = cdrom_file::find_region(lookup_track, { 899 });
+	REQUIRE(found_region == nullptr);
+
+	found_region = cdrom_file::find_region(lookup_track, { 900 });
+	REQUIRE(found_region == &lookup_track.regions[0]);
+
+	found_region = cdrom_file::find_region(lookup_track, { 999 });
+	REQUIRE(found_region == &lookup_track.regions[0]);
+
+	found_region = cdrom_file::find_region(lookup_track, { 1000 });
+	REQUIRE(found_region == &lookup_track.regions[1]);
+
+	found_region = cdrom_file::find_region(lookup_track, { 1199 });
+	REQUIRE(found_region == &lookup_track.regions[1]);
+
+	found_region = cdrom_file::find_region(lookup_track, { 1200 });
+	REQUIRE(found_region == nullptr);
+
+	cdrom_file::disc_track gapped_track;
+
+	cdrom_file::region first_region = program;
+	first_region.start = { 1000 };
+	first_region.frames = 50;
+
+	cdrom_file::region second_region = program;
+	second_region.start = { 1100 };
+	second_region.frames = 50;
+
+	gapped_track.regions.push_back(first_region);
+	gapped_track.regions.push_back(second_region);
+
+	REQUIRE(cdrom_file::find_region(gapped_track, { 1049 }) == &gapped_track.regions[0]);
+	REQUIRE(cdrom_file::find_region(gapped_track, { 1050 }) == nullptr);
+	REQUIRE(cdrom_file::find_region(gapped_track, { 1099 }) == nullptr);
+	REQUIRE(cdrom_file::find_region(gapped_track, { 1100 }) == &gapped_track.regions[1]);
 }
 
 TEST_CASE("CD-ROM Q subchannel indexes", "[util][cdrom]")
