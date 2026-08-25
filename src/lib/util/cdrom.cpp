@@ -1314,7 +1314,8 @@ bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) c
 
 bool cdrom_file::get_subcode_raw(uint32_t lbasector, uint8_t *buffer, bool phys) const
 {
-		uint32_t tracknum = 0;
+	uint32_t tracknum = 0;
+	const region *canonical_region = nullptr;
 
 	if (phys)
 	{
@@ -1330,27 +1331,21 @@ bool cdrom_file::get_subcode_raw(uint32_t lbasector, uint8_t *buffer, bool phys)
 
 		if (canonical_track)
 		{
-			const region *const canonical_region =
-					find_region(*canonical_track, position);
-
-			if (canonical_region
-					&& canonical_region->kind == region_kind::pregap
-					&& canonical_region->main_data != region_presence::captured)
-			{
-				tracknum = canonical_track->number - 1;
-			}
+			tracknum = canonical_track->number - 1;
+			canonical_region = find_region(*canonical_track, position);
 		}
 	}
 
-const track_info &track = cdtoc.tracks[tracknum];
-	
-	const bool virtual_pregap =
+	const track_info &track = cdtoc.tracks[tracknum];
+
+	const bool uncaptured_pregap =
 			!phys
-				&& (track.pgdatasize == 0)
-				&& (lbasector < track.logframeofs);
+				&& canonical_region
+				&& canonical_region->kind == region_kind::pregap
+				&& canonical_region->subcode != region_presence::captured;
 	
 	// Preserve captured raw P-W subcode exactly as stored.
-		if (!virtual_pregap && track.subsize == 96)
+		if (!uncaptured_pregap && track.subsize == 96)
 	{
 		if (track.subtype == CD_SUB_RAW)
 			return const_cast<cdrom_file *>(this)->read_subcode(lbasector, buffer, phys);
@@ -1360,7 +1355,7 @@ const track_info &track = cdtoc.tracks[tracknum];
 		return false;
 	}
 
-		if (!virtual_pregap && track.subsize != 0)
+		if (!uncaptured_pregap && track.subsize != 0)
 		return false;
 
 	uint8_t q[12];
