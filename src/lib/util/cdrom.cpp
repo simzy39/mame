@@ -328,14 +328,15 @@ cdrom_file::cdrom_file(chd_file *_chd)
 	}
 
 		// fill out dummy entries for the last track to help our search
-	track_info &track = cdtoc.tracks[cdtoc.numtrks];
-	track.physframeofs = physofs;
-	track.logframeofs = logofs;
-	track.chdframeofs = chdofs;
-	track.logframes = 0;
-
-	reconstruct_track_indexes();
-}
+		track_info &track = cdtoc.tracks[cdtoc.numtrks];
+		track.physframeofs = physofs;
+		track.logframeofs = logofs;
+		track.chdframeofs = chdofs;
+		track.logframes = 0;
+		
+		reconstruct_track_indexes();
+		m_disc = get_disc();
+		}
 
 /*-------------------------------------------------
     destructor - "close" a CD-ROM file
