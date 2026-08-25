@@ -143,6 +143,7 @@ public:
 	    region_presence main_data;
 	    region_presence subcode;
 	    std::optional<captured_position> captured;
+		std::vector<backing_span> backing;
 	};
 
 	struct index
