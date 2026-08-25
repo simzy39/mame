@@ -1411,30 +1411,25 @@ uint16_t cdrom_file::subcode_q_crc(const uint8_t *data)
 
 uint32_t cdrom_file::get_track_index(uint32_t frame) const
 {
-	uint32_t track = 0;
+		uint32_t track = 0;
 	logical_to_chd_lba(frame, track);
 
-		// Track 1 can have a virtual pregap before its INDEX 01 position.
-	if (track == 0
-			&& cdtoc.tracks[0].pgdatasize == 0
-			&& cdtoc.tracks[0].pregap != 0
-			&& frame < cdtoc.tracks[0].logframeofs)
-	{
-		return 0;
-	}
+	const disc_position position{ int32_t(frame) };
+	const disc_track *const canonical_track =
+			find_track(m_disc, position);
 
-	// A virtual pregap belongs to the upcoming track and is INDEX 00.
-	if (track + 1 < cdtoc.numtrks)
+	if (canonical_track)
 	{
-		const track_info &next_track = cdtoc.tracks[track + 1];
+		const region *const canonical_region =
+				find_region(*canonical_track, position);
 
-		if (next_track.pgdatasize == 0
-				&& next_track.pregap != 0
-				&& frame >= next_track.logframeofs - next_track.pregap
-				&& frame < next_track.logframeofs)
+		if (canonical_region
+				&& canonical_region->kind == region_kind::pregap)
 		{
 			return 0;
 		}
+
+		track = canonical_track->number - 1;
 	}
 
 	const track_info &trackinfo = cdtoc.tracks[track];
