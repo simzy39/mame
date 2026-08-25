@@ -375,6 +375,7 @@ public:
 	static const backing_span *find_backing_span(
 			const region &region,
 			disc_position position);
+	static bool validate_backing_spans(const region &region);
 	void reconstruct_track_indexes();
 
 	/* extra utilities */
