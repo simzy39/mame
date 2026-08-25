@@ -277,8 +277,8 @@ TEST_CASE("CD-ROM region supports multiple backing spans", "[util][cdrom]")
 	REQUIRE(sector.has_value());
 	REQUIRE(sector->frame == 600);
 
-		REQUIRE_FALSE(
-			cdrom_file::backing_subcode_position(program, { 999 }).has_value());
+	REQUIRE_FALSE(
+		cdrom_file::backing_subcode_position(program, { 999 }).has_value());
 
 	auto subcode =
 			cdrom_file::backing_subcode_position(program, { 1000 });
@@ -414,6 +414,46 @@ TEST_CASE("CD-ROM region supports multiple backing spans", "[util][cdrom]")
 	REQUIRE(cdrom_file::find_region(gapped_track, { 1050 }) == nullptr);
 	REQUIRE(cdrom_file::find_region(gapped_track, { 1099 }) == nullptr);
 	REQUIRE(cdrom_file::find_region(gapped_track, { 1100 }) == &gapped_track.regions[1]);
+
+		REQUIRE_FALSE(
+			cdrom_file::backing_sector_position(
+					lookup_track, { 899 }).has_value());
+
+	auto track_sector =
+			cdrom_file::backing_sector_position(
+					lookup_track, { 1000 });
+	REQUIRE(track_sector.has_value());
+	REQUIRE(track_sector->frame == 500);
+
+	track_sector =
+			cdrom_file::backing_sector_position(
+					lookup_track, { 1100 });
+	REQUIRE(track_sector.has_value());
+	REQUIRE(track_sector->frame == 600);
+
+	REQUIRE_FALSE(
+			cdrom_file::backing_channel_position(
+					lookup_track, { 1000 }).has_value());
+
+	auto track_subcode =
+			cdrom_file::backing_subcode_position(
+					lookup_track, { 1000 });
+	REQUIRE(track_subcode.has_value());
+	REQUIRE(track_subcode->frame == 700);
+
+	track_subcode =
+			cdrom_file::backing_subcode_position(
+					lookup_track, { 1100 });
+	REQUIRE(track_subcode.has_value());
+	REQUIRE(track_subcode->frame == 799);
+
+	REQUIRE_FALSE(
+			cdrom_file::backing_sector_position(
+					gapped_track, { 1050 }).has_value());
+
+	REQUIRE_FALSE(
+			cdrom_file::backing_subcode_position(
+					gapped_track, { 1099 }).has_value());
 }
 
 TEST_CASE("CD-ROM Q subchannel indexes", "[util][cdrom]")
