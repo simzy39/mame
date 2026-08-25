@@ -416,8 +416,8 @@ std::error_condition cdrom_file::read_partial_sector(void *dest, uint32_t lbasec
 		int bytespersector = cdtoc.tracks[tracknum].datasize + cdtoc.tracks[tracknum].subsize;
 		uint64_t sourcefileoffset = cdtrack_info.track[tracknum].offset;
 
-		if (cdtoc.tracks[tracknum].pgdatasize != 0)
-			chdsector += cdtoc.tracks[tracknum].pregap;
+		if (!phys && cdtoc.tracks[tracknum].pgdatasize != 0)
+		chdsector += cdtoc.tracks[tracknum].pregap;
 
 		sourcefileoffset += chdsector * bytespersector + startoffs;
 
