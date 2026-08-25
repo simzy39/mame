@@ -797,6 +797,40 @@ TEST_CASE("CD-ROM raw subcode later-track virtual pregap", "[util][cdrom]")
 	REQUIRE(track2_program.backing[0].captured.sector_data->frame == 225);
 	REQUIRE_FALSE(track2_program.backing[0].captured.main_channel.has_value());
 	REQUIRE_FALSE(track2_program.backing[0].captured.subcode.has_value());
+
+		REQUIRE_FALSE(
+			cdrom_file::backing_sector_position(
+					track2_pregap, { 225 }).has_value());
+
+	auto sector =
+			cdrom_file::backing_sector_position(
+					track2_program, { 375 });
+	REQUIRE(sector.has_value());
+	REQUIRE(sector->frame == 225);
+
+	sector =
+			cdrom_file::backing_sector_position(
+					track2_program, { 376 });
+	REQUIRE(sector.has_value());
+	REQUIRE(sector->frame == 226);
+
+	sector =
+			cdrom_file::backing_sector_position(
+					track2_program, { 524 });
+	REQUIRE(sector.has_value());
+	REQUIRE(sector->frame == 374);
+
+	REQUIRE_FALSE(
+			cdrom_file::backing_sector_position(
+					track2_program, { 525 }).has_value());
+
+	REQUIRE_FALSE(
+			cdrom_file::backing_channel_position(
+					track2_program, { 375 }).has_value());
+
+	REQUIRE_FALSE(
+			cdrom_file::backing_subcode_position(
+					track2_program, { 375 }).has_value());
 	
 	uint8_t subcode[96];
 	uint8_t q[12];
