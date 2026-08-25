@@ -628,7 +628,8 @@ TEST_CASE("CD CHD reconstructs later-track index relative to stored pregap", "[u
 	const cdrom_file::region &track2_pregap_region = track2_disc.regions[0];
 	REQUIRE(track2_pregap_region.kind == cdrom_file::region_kind::pregap);
 	REQUIRE(track2_pregap_region.start.frame == 4);
-	REQUIRE(track2_pregap_region.length == track2_pregap);
+	REQUIRE(track2_pregap_region.frames.has_value());
+	REQUIRE(*track2_pregap_region.frames == track2_pregap);
 	REQUIRE(track2_pregap_region.captured.has_value());
 	REQUIRE(track2_pregap_region.captured->sector_data.has_value());
 	REQUIRE(track2_pregap_region.captured->sector_data->frame == 4);
