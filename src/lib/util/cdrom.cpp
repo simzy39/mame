@@ -1654,6 +1654,53 @@ const cdrom_file::backing_span *cdrom_file::find_backing_span(
 	return nullptr;
 }
 
+bool cdrom_file::validate_backing_spans(const region &region)
+{
+	int64_t previous_end = int64_t(region.start.frame);
+
+	for (std::size_t index = 0; index < region.backing.size(); ++index)
+	{
+		const backing_span &span = region.backing[index];
+		const int64_t start = int64_t(span.start.frame);
+
+		if (start < int64_t(region.start.frame))
+			return false;
+
+		if (start < previous_end)
+			return false;
+
+		if (!span.frames.has_value())
+		{
+			if (index + 1 != region.backing.size())
+				return false;
+
+			if (region.frames.has_value())
+				return false;
+
+			return true;
+		}
+
+		if (*span.frames == 0)
+			return false;
+
+		const int64_t end = start + int64_t(*span.frames);
+
+		if (region.frames.has_value())
+		{
+			const int64_t region_end =
+					int64_t(region.start.frame)
+						+ int64_t(*region.frames);
+
+			if (end > region_end)
+				return false;
+		}
+
+		previous_end = end;
+	}
+
+	return true;
+}
+
 void cdrom_file::reconstruct_track_indexes()
 {
 	if (chd == nullptr)
