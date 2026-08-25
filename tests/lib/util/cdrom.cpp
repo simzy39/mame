@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <fstream>
 #include <vector>
+#include <algorithm>
 
 
 static uint16_t reference_q_crc(const uint8_t *data)
@@ -477,6 +478,40 @@ TEST_CASE("CD-ROM raw subcode later-track virtual pregap", "[util][cdrom]")
 
 	cdrom_file cd(tocpath.string());
 
+	const cdrom_file::disc disc = cd.get_disc();
+
+	REQUIRE(disc.tracks.size() == 2);
+
+	const cdrom_file::disc_track &track1 = disc.tracks[0];
+	REQUIRE(track1.regions.size() == 1);
+
+	const cdrom_file::region &track1_program = track1.regions[0];
+	REQUIRE(track1_program.kind == cdrom_file::region_kind::program);
+	REQUIRE(track1_program.subcode == cdrom_file::region_presence::captured);
+	REQUIRE(track1_program.captured.has_value());
+	REQUIRE(track1_program.captured->sector_data.has_value());
+	REQUIRE(track1_program.captured->sector_data->frame == 0);
+	REQUIRE_FALSE(track1_program.captured->main_channel.has_value());
+	REQUIRE(track1_program.captured->subcode.has_value());
+	REQUIRE(track1_program.captured->subcode->frame == 0);
+
+	const cdrom_file::disc_track &track2 = disc.tracks[1];
+	REQUIRE(track2.regions.size() >= 2);
+
+	const cdrom_file::region &track2_pregap = track2.regions[0];
+	REQUIRE(track2_pregap.kind == cdrom_file::region_kind::pregap);
+	REQUIRE(track2_pregap.subcode == cdrom_file::region_presence::unknown);
+	REQUIRE_FALSE(track2_pregap.captured.has_value());
+
+	const cdrom_file::region &track2_program = track2.regions[1];
+	REQUIRE(track2_program.kind == cdrom_file::region_kind::program);
+	REQUIRE(track2_program.subcode == cdrom_file::region_presence::unknown);
+	REQUIRE(track2_program.captured.has_value());
+	REQUIRE(track2_program.captured->sector_data.has_value());
+	REQUIRE(track2_program.captured->sector_data->frame == 225);
+	REQUIRE_FALSE(track2_program.captured->main_channel.has_value());
+	REQUIRE_FALSE(track2_program.captured->subcode.has_value());
+	
 	uint8_t subcode[96];
 	uint8_t q[12];
 
