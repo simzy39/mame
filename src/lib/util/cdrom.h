@@ -374,6 +374,15 @@ public:
 	static const region *find_region(
 			const disc_track &track,
 			disc_position position);
+	static std::optional<sector_position> backing_sector_position(
+			const disc_track &track,
+			disc_position position);
+	static std::optional<channel_position> backing_channel_position(
+			const disc_track &track,
+			disc_position position);
+	static std::optional<subcode_position> backing_subcode_position(
+			const disc_track &track,
+			disc_position position);
 	static const backing_span *find_backing_span(
 			const region &region,
 			disc_position position);
