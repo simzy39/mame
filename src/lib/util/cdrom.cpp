@@ -1652,6 +1652,39 @@ const cdrom_file::region *cdrom_file::find_region(
 	return nullptr;
 }
 
+std::optional<cdrom_file::sector_position> cdrom_file::backing_sector_position(
+		const disc_track &track,
+		disc_position position)
+{
+	const region *const region = find_region(track, position);
+	if (!region)
+		return std::nullopt;
+
+	return backing_sector_position(*region, position);
+}
+
+std::optional<cdrom_file::channel_position> cdrom_file::backing_channel_position(
+		const disc_track &track,
+		disc_position position)
+{
+	const region *const region = find_region(track, position);
+	if (!region)
+		return std::nullopt;
+
+	return backing_channel_position(*region, position);
+}
+
+std::optional<cdrom_file::subcode_position> cdrom_file::backing_subcode_position(
+		const disc_track &track,
+		disc_position position)
+{
+	const region *const region = find_region(track, position);
+	if (!region)
+		return std::nullopt;
+
+	return backing_subcode_position(*region, position);
+}
+
 const cdrom_file::backing_span *cdrom_file::find_backing_span(
 		const region &region,
 		disc_position position)
