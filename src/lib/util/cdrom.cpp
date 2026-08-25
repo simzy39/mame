@@ -1668,6 +1668,22 @@ std::optional<cdrom_file::sector_position> cdrom_file::backing_sector_position(
 	};
 }
 
+std::optional<cdrom_file::subcode_position> cdrom_file::backing_subcode_position(
+		const region &region,
+		disc_position position)
+{
+	const backing_span *const span = find_backing_span(region, position);
+	if (!span || !span->captured.subcode.has_value())
+		return std::nullopt;
+
+	const int64_t offset =
+			int64_t(position.frame) - int64_t(span->start.frame);
+
+	return subcode_position{
+			span->captured.subcode->frame + offset
+	};
+}
+
 bool cdrom_file::validate_backing_spans(const region &region)
 {
 	int64_t previous_end = int64_t(region.start.frame);
