@@ -454,6 +454,30 @@ TEST_CASE("CD-ROM region supports multiple backing spans", "[util][cdrom]")
 	REQUIRE_FALSE(
 			cdrom_file::backing_subcode_position(
 					gapped_track, { 1099 }).has_value());
+
+		cdrom_file::disc lookup_disc;
+	lookup_disc.tracks.push_back(lookup_track);
+	lookup_disc.tracks.push_back(gapped_track);
+
+	const cdrom_file::disc_track *found_track;
+
+	found_track = cdrom_file::find_track(lookup_disc, { 899 });
+	REQUIRE(found_track == nullptr);
+
+	found_track = cdrom_file::find_track(lookup_disc, { 900 });
+	REQUIRE(found_track == &lookup_disc.tracks[0]);
+
+	found_track = cdrom_file::find_track(lookup_disc, { 1000 });
+	REQUIRE(found_track == &lookup_disc.tracks[0]);
+
+	found_track = cdrom_file::find_track(lookup_disc, { 1049 });
+	REQUIRE(found_track == &lookup_disc.tracks[0]);
+
+	found_track = cdrom_file::find_track(lookup_disc, { 1199 });
+	REQUIRE(found_track == &lookup_disc.tracks[0]);
+
+	found_track = cdrom_file::find_track(lookup_disc, { 1200 });
+	REQUIRE(found_track == nullptr);
 }
 
 TEST_CASE("CD-ROM Q subchannel indexes", "[util][cdrom]")
