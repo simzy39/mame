@@ -1629,6 +1629,19 @@ cdrom_file::disc cdrom_file::get_disc() const
 	return result;
 }
 
+const cdrom_file::disc_track *cdrom_file::find_track(
+		const disc &disc,
+		disc_position position)
+{
+	for (const disc_track &track : disc.tracks)
+	{
+		if (find_region(track, position))
+			return &track;
+	}
+
+	return nullptr;
+}
+
 const cdrom_file::region *cdrom_file::find_region(
 		const disc_track &track,
 		disc_position position)
