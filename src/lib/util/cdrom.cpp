@@ -1202,7 +1202,8 @@ bool cdrom_file::make_subcode_q_position(
 
 bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) const
 {
-		uint32_t tracknum = 0;
+	uint32_t tracknum = 0;
+	const region *canonical_region = nullptr;
 
 	if (phys)
 	{
@@ -1218,37 +1219,18 @@ bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) c
 
 		if (canonical_track)
 		{
-			const region *const canonical_region =
-					find_region(*canonical_track, position);
-
-			if (canonical_region
-					&& canonical_region->kind == region_kind::pregap
-					&& canonical_region->main_data != region_presence::captured)
-			{
-				tracknum = canonical_track->number - 1;
-			}
+			tracknum = canonical_track->number - 1;
+			canonical_region = find_region(*canonical_track, position);
 		}
 	}
 
-		const track_info &track = cdtoc.tracks[tracknum];
+	const track_info &track = cdtoc.tracks[tracknum];
 
-		bool uncaptured_pregap = false;
-
-		if (!phys)
-		{
-			const disc_position position{ int32_t(lbasector) };
-			const disc_track *const canonical_track =
-					find_track(m_disc, position);
-		
-			if (canonical_track)
-			{
-				const region *const canonical_region =
-						find_region(*canonical_track, position);
-		
-				uncaptured_pregap =
-						canonical_region
-							&& canonical_region->kind == region_kind::pregap
-							&& canonical_region->subcode != region_presence::captured;
+	const bool uncaptured_pregap =
+			!phys
+				&& canonical_region
+				&& canonical_region->kind == region_kind::pregap
+				&& canonical_region->subcode != region_presence::captured;
 			}
 		}
 
