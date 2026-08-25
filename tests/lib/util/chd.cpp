@@ -630,10 +630,30 @@ TEST_CASE("CD CHD reconstructs later-track index relative to stored pregap", "[u
 	REQUIRE(track2_pregap_region.start.frame == 4);
 	REQUIRE(track2_pregap_region.frames.has_value());
 	REQUIRE(*track2_pregap_region.frames == track2_pregap);
+	REQUIRE(track2_pregap_region.backing.size() == 1);
+	REQUIRE(track2_pregap_region.backing[0].start.frame == 4);
+	REQUIRE(track2_pregap_region.backing[0].frames.has_value());
+	REQUIRE(*track2_pregap_region.backing[0].frames == track2_pregap);
+	REQUIRE(track2_pregap_region.backing[0].captured.sector_data.has_value());
+	REQUIRE(track2_pregap_region.backing[0].captured.sector_data->frame == 4);
+	REQUIRE_FALSE(track2_pregap_region.backing[0].captured.main_channel.has_value());
+	REQUIRE(track2_pregap_region.backing[0].captured.subcode.has_value());
+	REQUIRE(track2_pregap_region.backing[0].captured.subcode->frame == 4);
 
 	const cdrom_file::region &track2_program_region = track2_disc.regions[1];
 	REQUIRE(track2_program_region.kind == cdrom_file::region_kind::program);
 	REQUIRE(track2_program_region.start.frame == 6);
+	REQUIRE(track2_program_region.backing.size() == 1);
+	REQUIRE(track2_program_region.backing[0].start.frame == 6);
+	REQUIRE(track2_program_region.backing[0].frames.has_value());
+	REQUIRE(
+			*track2_program_region.backing[0].frames
+				== track2_frames - track2_pregap);
+	REQUIRE(track2_program_region.backing[0].captured.sector_data.has_value());
+	REQUIRE(track2_program_region.backing[0].captured.sector_data->frame == 6);
+	REQUIRE_FALSE(track2_program_region.backing[0].captured.main_channel.has_value());
+	REQUIRE(track2_program_region.backing[0].captured.subcode.has_value());
+	REQUIRE(track2_program_region.backing[0].captured.subcode->frame == 6);
 
 	REQUIRE(after.tracks[1].pregap == track2_pregap);
 	REQUIRE(after.tracks[1].pgdatasize != 0);
