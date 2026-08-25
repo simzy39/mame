@@ -155,6 +155,52 @@ TEST_CASE("CD-ROM region supports multiple backing spans", "[util][cdrom]")
 	REQUIRE(program.backing[1].captured.sector_data->frame == 600);
 	REQUIRE(program.backing[1].captured.subcode.has_value());
 	REQUIRE(program.backing[1].captured.subcode->frame == 799);
+
+	const cdrom_file::backing_span *span;
+
+	span = cdrom_file::find_backing_span(program, { 999 });
+	REQUIRE(span == nullptr);
+
+	span = cdrom_file::find_backing_span(program, { 1000 });
+	REQUIRE(span == &program.backing[0]);
+
+	span = cdrom_file::find_backing_span(program, { 1099 });
+	REQUIRE(span == &program.backing[0]);
+
+	span = cdrom_file::find_backing_span(program, { 1100 });
+	REQUIRE(span == &program.backing[1]);
+
+	span = cdrom_file::find_backing_span(program, { 1199 });
+	REQUIRE(span == &program.backing[1]);
+
+	span = cdrom_file::find_backing_span(program, { 1200 });
+	REQUIRE(span == nullptr);
+
+		cdrom_file::region open_ended;
+	open_ended.kind = cdrom_file::region_kind::lead_out;
+	open_ended.start = { 2000 };
+	open_ended.frames = std::nullopt;
+	open_ended.main_data = cdrom_file::region_presence::unknown;
+	open_ended.subcode = cdrom_file::region_presence::unknown;
+
+	open_ended.backing.push_back(
+			{
+				{ 2000 },
+				std::nullopt,
+				{
+					cdrom_file::sector_position{ 900 },
+					std::nullopt,
+					std::nullopt
+				}
+			});
+
+	REQUIRE(cdrom_file::find_backing_span(open_ended, { 1999 }) == nullptr);
+	REQUIRE(
+			cdrom_file::find_backing_span(open_ended, { 2000 })
+				== &open_ended.backing[0]);
+	REQUIRE(
+			cdrom_file::find_backing_span(open_ended, { 5000 })
+				== &open_ended.backing[0]);
 }
 
 TEST_CASE("CD-ROM Q subchannel indexes", "[util][cdrom]")
