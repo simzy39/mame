@@ -667,6 +667,7 @@ TEST_CASE("CD CHD reconstructs later-track index relative to stored pregap", "[u
 	chd.close();
 	std::filesystem::remove_all(tempdir);
 }
+
 TEST_CASE("CD CHD canonical backing ignores CHD track padding", "[util][chd][cdrom]")
 {
 	const std::filesystem::path tempdir =
@@ -786,6 +787,27 @@ TEST_CASE("CD CHD canonical backing ignores CHD track padding", "[util][chd][cdr
 			track2_program.captured->subcode->frame
 				== int64_t(track1_frames));
 
+	REQUIRE(track2_program.backing.size() == 1);
+
+	const cdrom_file::backing_span &track2_backing =
+			track2_program.backing[0];
+
+	REQUIRE(track2_backing.start.frame == int32_t(track1_frames));
+	REQUIRE(track2_backing.frames.has_value());
+	REQUIRE(*track2_backing.frames == track2_frames);
+
+	REQUIRE(track2_backing.captured.sector_data.has_value());
+	REQUIRE(
+			track2_backing.captured.sector_data->frame
+				== int64_t(track1_frames));
+
+	REQUIRE_FALSE(track2_backing.captured.main_channel.has_value());
+
+	REQUIRE(track2_backing.captured.subcode.has_value());
+	REQUIRE(
+			track2_backing.captured.subcode->frame
+				== int64_t(track1_frames));
+
 	// In particular, neither canonical coordinate may use Track 2's
 	// padded CHD frame offset of 4.
 	REQUIRE(
@@ -796,6 +818,15 @@ TEST_CASE("CD CHD canonical backing ignores CHD track padding", "[util][chd][cdr
 				!= int64_t(after.tracks[1].chdframeofs));
 	REQUIRE(
 			track2_program.captured->subcode->frame
+				!= int64_t(after.tracks[1].chdframeofs));
+	REQUIRE(
+			track2_backing.start.frame
+				!= int32_t(after.tracks[1].chdframeofs));
+	REQUIRE(
+			track2_backing.captured.sector_data->frame
+				!= int64_t(after.tracks[1].chdframeofs));
+	REQUIRE(
+			track2_backing.captured.subcode->frame
 				!= int64_t(after.tracks[1].chdframeofs));
 
 	chd.close();
