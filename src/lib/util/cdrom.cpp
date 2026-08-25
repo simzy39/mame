@@ -555,7 +555,6 @@ bool cdrom_file::read_data(uint32_t lbasector, void *buffer, uint32_t datatype, 
 
 bool cdrom_file::read_subcode(uint32_t lbasector, void *buffer, bool phys)
 {
-	// compute CHD sector and tracknumber
 	uint32_t tracknum = 0;
 	uint32_t chdsector;
 
@@ -565,10 +564,23 @@ bool cdrom_file::read_subcode(uint32_t lbasector, void *buffer, bool phys)
 	}
 	else
 	{
-		chdsector = logical_to_chd_lba(lbasector, tracknum);
+		const disc_position position{ int32_t(lbasector) };
+		const std::optional<subcode_position> backing =
+				backing_subcode_position(m_disc, position);
+
+		if (!backing)
+			return false;
+
+		if (backing->frame < 0)
+			return false;
+
+		chdsector =
+				physical_to_chd_lba(
+						uint32_t(backing->frame),
+						tracknum);
 	}
 
-		if (cdtoc.tracks[tracknum].subsize == 0)
+	if (cdtoc.tracks[tracknum].subsize == 0)
 		return false;
 
 	// Source images store subcode immediately after the track data, while
@@ -586,7 +598,7 @@ bool cdrom_file::read_subcode(uint32_t lbasector, void *buffer, bool phys)
 			tracknum,
 			subcode_offset,
 			cdtoc.tracks[tracknum].subsize,
-			phys);
+			true);
 	return !err;
 }
 
