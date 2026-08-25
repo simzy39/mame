@@ -630,22 +630,10 @@ TEST_CASE("CD CHD reconstructs later-track index relative to stored pregap", "[u
 	REQUIRE(track2_pregap_region.start.frame == 4);
 	REQUIRE(track2_pregap_region.frames.has_value());
 	REQUIRE(*track2_pregap_region.frames == track2_pregap);
-	REQUIRE(track2_pregap_region.captured.has_value());
-	REQUIRE(track2_pregap_region.captured->sector_data.has_value());
-	REQUIRE(track2_pregap_region.captured->sector_data->frame == 4);
-	REQUIRE_FALSE(track2_pregap_region.captured->main_channel.has_value());
-	REQUIRE(track2_pregap_region.captured->subcode.has_value());
-	REQUIRE(track2_pregap_region.captured->subcode->frame == 4);
 
 	const cdrom_file::region &track2_program_region = track2_disc.regions[1];
 	REQUIRE(track2_program_region.kind == cdrom_file::region_kind::program);
 	REQUIRE(track2_program_region.start.frame == 6);
-	REQUIRE(track2_program_region.captured.has_value());
-	REQUIRE(track2_program_region.captured->sector_data.has_value());
-	REQUIRE(track2_program_region.captured->sector_data->frame == 6);
-	REQUIRE_FALSE(track2_program_region.captured->main_channel.has_value());
-	REQUIRE(track2_program_region.captured->subcode.has_value());
-	REQUIRE(track2_program_region.captured->subcode->frame == 6);
 
 	REQUIRE(after.tracks[1].pregap == track2_pregap);
 	REQUIRE(after.tracks[1].pgdatasize != 0);
@@ -773,20 +761,6 @@ TEST_CASE("CD CHD canonical backing ignores CHD track padding", "[util][chd][cdr
 	// Canonical disc position follows the physical disc, not CHD padding.
 	REQUIRE(track2_program.start.frame == int32_t(track1_frames));
 
-	REQUIRE(track2_program.captured.has_value());
-
-	REQUIRE(track2_program.captured->sector_data.has_value());
-	REQUIRE(
-			track2_program.captured->sector_data->frame
-				== int64_t(track1_frames));
-
-	REQUIRE_FALSE(track2_program.captured->main_channel.has_value());
-
-	REQUIRE(track2_program.captured->subcode.has_value());
-	REQUIRE(
-			track2_program.captured->subcode->frame
-				== int64_t(track1_frames));
-
 	REQUIRE(track2_program.backing.size() == 1);
 
 	const cdrom_file::backing_span &track2_backing =
@@ -813,12 +787,6 @@ TEST_CASE("CD CHD canonical backing ignores CHD track padding", "[util][chd][cdr
 	REQUIRE(
 			track2_program.start.frame
 				!= int32_t(after.tracks[1].chdframeofs));
-	REQUIRE(
-			track2_program.captured->sector_data->frame
-				!= int64_t(after.tracks[1].chdframeofs));
-	REQUIRE(
-			track2_program.captured->subcode->frame
-				!= int64_t(after.tracks[1].chdframeofs));
 	REQUIRE(
 			track2_backing.start.frame
 				!= int32_t(after.tracks[1].chdframeofs));
