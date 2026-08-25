@@ -86,6 +86,25 @@ TEST_CASE("CD-ROM coordinate types remain distinct", "[util][cdrom]")
 	REQUIRE_FALSE(subcode_only.main_channel.has_value());
 	REQUIRE(subcode_only.subcode.has_value());
 	REQUIRE(subcode_only.subcode->frame == 5678);
+
+		cdrom_file::backing_span span{
+			{ 1000 },
+			100,
+			{
+				cdrom_file::sector_position{ 500 },
+				std::nullopt,
+				cdrom_file::subcode_position{ 700 }
+			}
+	};
+
+	REQUIRE(span.start.frame == 1000);
+	REQUIRE(span.frames.has_value());
+	REQUIRE(*span.frames == 100);
+	REQUIRE(span.captured.sector_data.has_value());
+	REQUIRE(span.captured.sector_data->frame == 500);
+	REQUIRE_FALSE(span.captured.main_channel.has_value());
+	REQUIRE(span.captured.subcode.has_value());
+	REQUIRE(span.captured.subcode->frame == 700);
 }
 
 TEST_CASE("CD-ROM Q subchannel indexes", "[util][cdrom]")
