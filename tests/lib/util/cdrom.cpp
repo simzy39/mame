@@ -243,6 +243,39 @@ TEST_CASE("CD-ROM region supports multiple backing spans", "[util][cdrom]")
 	with_gap.backing[0].frames = 50;
 	with_gap.backing[1].start = { 1100 };
 	REQUIRE(cdrom_file::validate_backing_spans(with_gap));
+
+	REQUIRE_FALSE(
+		cdrom_file::backing_sector_position(program, { 999 }).has_value());
+
+	auto sector =
+			cdrom_file::backing_sector_position(program, { 1000 });
+	REQUIRE(sector.has_value());
+	REQUIRE(sector->frame == 500);
+
+	sector = cdrom_file::backing_sector_position(program, { 1099 });
+	REQUIRE(sector.has_value());
+	REQUIRE(sector->frame == 599);
+
+	sector = cdrom_file::backing_sector_position(program, { 1100 });
+	REQUIRE(sector.has_value());
+	REQUIRE(sector->frame == 600);
+
+	sector = cdrom_file::backing_sector_position(program, { 1199 });
+	REQUIRE(sector.has_value());
+	REQUIRE(sector->frame == 699);
+
+	REQUIRE_FALSE(
+			cdrom_file::backing_sector_position(program, { 1200 }).has_value());
+
+	cdrom_file::region no_sector = program;
+	no_sector.backing[0].captured.sector_data = std::nullopt;
+
+	REQUIRE_FALSE(
+			cdrom_file::backing_sector_position(no_sector, { 1000 }).has_value());
+
+	sector = cdrom_file::backing_sector_position(no_sector, { 1100 });
+	REQUIRE(sector.has_value());
+	REQUIRE(sector->frame == 600);
 }
 
 TEST_CASE("CD-ROM Q subchannel indexes", "[util][cdrom]")
