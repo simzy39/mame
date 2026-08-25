@@ -112,6 +112,13 @@ public:
 		std::optional<subcode_position> subcode;
 	};
 
+	struct backing_span
+	{
+		disc_position start;
+		std::optional<uint32_t> frames;
+		captured_position captured;
+	};
+
 	enum class region_kind
 	{
 		lead_in,
