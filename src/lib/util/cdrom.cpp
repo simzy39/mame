@@ -413,34 +413,42 @@ std::error_condition cdrom_file::read_partial_sector(void *dest, uint32_t chdsec
 
 bool cdrom_file::read_data(uint32_t lbasector, void *buffer, uint32_t datatype, bool phys)
 {
-	uint32_t tracknum = 0;
-	uint32_t chdsector;
+	disc_position position;
 
 	if (phys)
 	{
-		chdsector = physical_to_chd_lba(lbasector, tracknum);
+		const std::optional<disc_position> canonical_position =
+				disc_position_from_sector_position(
+						m_disc,
+						sector_position{ int64_t(lbasector) });
+
+		if (!canonical_position.has_value())
+			return false;
+
+		position = *canonical_position;
 	}
 	else
 	{
-		const disc_position position{ int32_t(lbasector) };
-		const disc_track *const canonical_track =
-				find_track(m_disc, position);
-		const std::optional<sector_position> backing =
-				backing_sector_position(m_disc, position);
-
-		if (!canonical_track || !backing)
-			return false;
-
-		if (backing->frame < 0)
-			return false;
-
-		tracknum = canonical_track->number - 1;
-		chdsector =
-				physical_to_chd_lba(
-						uint32_t(backing->frame),
-						tracknum);
+		position = disc_position{ int32_t(lbasector) };
 	}
 
+	const disc_track *const canonical_track =
+			find_track(m_disc, position);
+	const std::optional<sector_position> backing =
+			backing_sector_position(m_disc, position);
+
+	if (!canonical_track || !backing)
+		return false;
+
+	if (backing->frame < 0)
+		return false;
+
+	uint32_t tracknum = canonical_track->number - 1;
+	const uint32_t chdsector =
+			physical_to_chd_lba(
+					uint32_t(backing->frame),
+					tracknum);
+	
 	// copy out the requested sector
 	uint32_t tracktype = cdtoc.tracks[tracknum].trktype;
 
