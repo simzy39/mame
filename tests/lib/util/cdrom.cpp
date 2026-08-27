@@ -1008,9 +1008,15 @@ TEST_CASE("CD-ROM raw subcode later-track virtual pregap", "[util][cdrom]")
 	REQUIRE(sector.has_value());
 	REQUIRE(sector->frame == 374);
 
+	sector =
+        cdrom_file::backing_sector_position(
+                track2_program, { 674 });
+	REQUIRE(sector.has_value());
+	REQUIRE(sector->frame == 524);
+	
 	REQUIRE_FALSE(
-			cdrom_file::backing_sector_position(
-					track2_program, { 525 }).has_value());
+	        cdrom_file::backing_sector_position(
+	                track2_program, { 675 }).has_value());
 
 	REQUIRE_FALSE(
 			cdrom_file::backing_channel_position(
@@ -1036,9 +1042,15 @@ TEST_CASE("CD-ROM raw subcode later-track virtual pregap", "[util][cdrom]")
 			cdrom_file::backing_sector_position(
 					track2, { 225 }).has_value());
 
+	track_sector =
+        cdrom_file::backing_sector_position(
+                track2, { 674 });
+	REQUIRE(track_sector.has_value());
+	REQUIRE(track_sector->frame == 524);
+	
 	REQUIRE_FALSE(
-			cdrom_file::backing_sector_position(
-					track2, { 525 }).has_value());
+	        cdrom_file::backing_sector_position(
+	                track2, { 675 }).has_value());
 
 	REQUIRE_FALSE(
 			cdrom_file::backing_channel_position(
@@ -1064,9 +1076,15 @@ TEST_CASE("CD-ROM raw subcode later-track virtual pregap", "[util][cdrom]")
 			cdrom_file::backing_sector_position(
 					disc, { 225 }).has_value());
 
+	disc_sector =
+        cdrom_file::backing_sector_position(
+                disc, { 674 });
+	REQUIRE(disc_sector.has_value());
+	REQUIRE(disc_sector->frame == 524);
+	
 	REQUIRE_FALSE(
-			cdrom_file::backing_sector_position(
-					disc, { 525 }).has_value());
+	        cdrom_file::backing_sector_position(
+	                disc, { 675 }).has_value());
 
 	REQUIRE_FALSE(
 			cdrom_file::backing_channel_position(
