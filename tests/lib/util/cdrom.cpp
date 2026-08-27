@@ -1406,6 +1406,26 @@ TEST_CASE("CD-ROM Q subchannel later-track stored pregap", "[util][cdrom]")
 
 	cdrom_file cd(cuepath.string());
 
+		const cdrom_file::disc disc = cd.get_disc();
+
+	auto position =
+			cdrom_file::disc_position_from_sector_position(
+					disc, { 225 });
+	REQUIRE(position.has_value());
+	REQUIRE(position->frame == 225);
+
+	position =
+			cdrom_file::disc_position_from_sector_position(
+					disc, { 374 });
+	REQUIRE(position.has_value());
+	REQUIRE(position->frame == 374);
+
+	position =
+			cdrom_file::disc_position_from_sector_position(
+					disc, { 375 });
+	REQUIRE(position.has_value());
+	REQUIRE(position->frame == 375);
+	
 	uint8_t q[12];
 
 	// Track 2's physically stored pregap begins at physical frame 225.
