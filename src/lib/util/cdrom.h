@@ -508,6 +508,9 @@ public:
 	const disc &get_disc() const;
 	disc build_disc() const;
 
+	static std::error_condition validate_cdm1_metadata(
+			const std::vector<uint8_t> &metadata);
+
 	static const disc_track *find_track(
 			const disc &disc,
 			disc_position position);
