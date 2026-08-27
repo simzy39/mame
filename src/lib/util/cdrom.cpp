@@ -1401,26 +1401,23 @@ uint16_t cdrom_file::subcode_q_crc(const uint8_t *data)
 
 uint32_t cdrom_file::get_track_index(uint32_t frame) const
 {
-		uint32_t track = 0;
-	logical_to_chd_lba(frame, track);
-
 	const disc_position position{ int32_t(frame) };
 	const disc_track *const canonical_track =
 			find_track(m_disc, position);
 
-	if (canonical_track)
+	if (!canonical_track)
+		return 1;
+
+	const region *const canonical_region =
+			find_region(*canonical_track, position);
+
+	if (canonical_region
+			&& canonical_region->kind == region_kind::pregap)
 	{
-		const region *const canonical_region =
-				find_region(*canonical_track, position);
-
-		if (canonical_region
-				&& canonical_region->kind == region_kind::pregap)
-		{
-			return 0;
-		}
-
-		track = canonical_track->number - 1;
+		return 0;
 	}
+
+	const uint32_t track = canonical_track->number - 1;
 
 	const track_info &trackinfo = cdtoc.tracks[track];
 
