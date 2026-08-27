@@ -1703,6 +1703,64 @@ TEST_CASE("CD-ROM Q subchannel packet classification", "[util][cdrom]")
 					== cdrom_file::q_type::isrc);
 	}
 
+	SECTION("ISRC decode")
+	{
+		// "USABC2601234"
+		//
+		// U = 0x25, S = 0x23, A = 0x11,
+		// B = 0x12, C = 0x13.
+		const uint32_t first_five =
+				(uint32_t(0x25) << 26)
+					| (uint32_t(0x23) << 20)
+					| (uint32_t(0x11) << 14)
+					| (uint32_t(0x12) << 8)
+					| (uint32_t(0x13) << 2);
+	
+		uint8_t q[12] =
+		{
+			0x03,
+			uint8_t(first_five >> 24),
+			uint8_t(first_five >> 16),
+			uint8_t(first_five >> 8),
+			uint8_t(first_five),
+			0x26,
+			0x01,
+			0x23,
+			0x40,
+			0x42,
+			0x00, 0x00
+		};
+	
+		update_crc(q);
+	
+		cdrom_file::q_isrc isrc;
+	
+		REQUIRE(cdrom_file::decode_subcode_q_isrc(q, isrc));
+	
+		const std::array<char, 12> expected =
+		{
+			'U', 'S', 'A', 'B', 'C',
+			'2', '6', '0', '1', '2', '3', '4'
+		};
+	
+		REQUIRE(isrc.code == expected);
+		REQUIRE(isrc.absolute_frame == 42);
+		REQUIRE(
+				isrc.adr_control
+					== (cdrom_file::CD_FLAG_ADR_ISRC_CODE << 4));
+	
+		// Reserved bits must be zero.
+		q[8] |= 0x01;
+		update_crc(q);
+		REQUIRE_FALSE(cdrom_file::decode_subcode_q_isrc(q, isrc));
+	
+		// AFRAME is limited to 00-74.
+		q[8] &= 0xf0;
+		q[9] = 0x75;
+		update_crc(q);
+		REQUIRE_FALSE(cdrom_file::decode_subcode_q_isrc(q, isrc));
+	}
+
 	SECTION("unknown ADR")
 	{
 		uint8_t q[12] = {};
