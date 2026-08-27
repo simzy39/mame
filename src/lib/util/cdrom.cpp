@@ -1305,8 +1305,6 @@ bool cdrom_file::get_subcode_raw(uint32_t lbasector, uint8_t *buffer, bool phys)
 	}
 	else
 	{
-		logical_to_chd_lba(lbasector, tracknum);
-
 		const disc_position position{ int32_t(lbasector) };
 		const disc_track *const canonical_track =
 				find_track(m_disc, position);
