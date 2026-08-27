@@ -1235,42 +1235,44 @@ bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) c
 		if (!uncaptured_pregap && track.subsize != 0)
 		return false;
 
-		int64_t track_frame;
-	int64_t logical_frame;
+			disc_position discpos;
 
 	if (phys)
 	{
-		const uint32_t track_start =
-				track.physframeofs
-					+ ((track.pgdatasize != 0) ? track.pregap : 0);
+		const std::optional<disc_position> position =
+				disc_position_from_sector_position(
+						m_disc,
+						sector_position{ int64_t(lbasector) });
 
-		track_frame =
-				int64_t(lbasector) - int64_t(track_start);
+		if (!position.has_value())
+			return false;
 
-		logical_frame =
-				int64_t(track.logframeofs)
-					+ track_frame;
+		discpos = *position;
 	}
 	else
 	{
-		if (!canonical_track)
-			return false;
-
-		const auto index01 = std::find_if(
-				canonical_track->indexes.begin(),
-				canonical_track->indexes.end(),
-				[](const index &entry)
-				{
-					return entry.number == 1;
-				});
-
-		if (index01 == canonical_track->indexes.end())
-			return false;
-
-		logical_frame = int64_t(lbasector);
-		track_frame =
-				logical_frame - int64_t(index01->start.frame);
+		discpos = disc_position{ int32_t(lbasector) };
 	}
+
+	canonical_track = find_track(m_disc, discpos);
+
+	if (!canonical_track)
+		return false;
+
+	const auto index01 = std::find_if(
+			canonical_track->indexes.begin(),
+			canonical_track->indexes.end(),
+			[](const index &entry)
+			{
+				return entry.number == 1;
+			});
+
+	if (index01 == canonical_track->indexes.end())
+		return false;
+
+	const int64_t logical_frame = int64_t(discpos.frame);
+	const int64_t track_frame =
+			logical_frame - int64_t(index01->start.frame);
 
 		if (m_disc.tracks.empty())
 		return false;
@@ -1292,13 +1294,7 @@ bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) c
 	const int64_t absolute_frame =
 			logical_frame + 150 - int64_t(first_index01->start.frame);
 
-		q_position q;
-
-	const disc_position discpos{ int32_t(logical_frame) };
-	canonical_track = find_track(m_disc, discpos);
-
-	if (!canonical_track)
-		return false;
+	q_position q;
 
 	if (!make_subcode_q_position(
 			*canonical_track,
