@@ -422,54 +422,16 @@ class chd_cd_compressor : public chd_file_compressor
 {
 public:
 	// construction/destruction
-		chd_cd_compressor(
+			chd_cd_compressor(
 			const cdrom_file::toc &source_toc,
+			const cdrom_file::disc &source_disc,
 			cdrom_file::track_input_info &info)
 		: m_file()
 		, m_source_toc(source_toc)
+		, m_source_disc(source_disc)
 		, m_info(info)
 	{
-		// Build the absolute INDEX 01 position for each track using the
-		// same logical disc layout used by cdrom_file.
-		int64_t logical_offset = 0;
-		int64_t first_track_start = 0;
-
-		for (int tracknum = 0; tracknum < m_source_toc.numtrks; tracknum++)
-		{
-			const cdrom_file::track_info &track = m_source_toc.tracks[tracknum];
-
-			int64_t track_start = 0;
-
-			if (track.pgdatasize == 0)
-				logical_offset += track.pregap;
-			else
-				track_start = track.pregap;
-
-			if ((m_source_toc.flags & cdrom_file::CD_FLAG_MULTISESSION)
-					&& m_info.track[tracknum].leadin != -1)
-			{
-				logical_offset += m_info.track[tracknum].leadin;
-			}
-
-			track_start += logical_offset;
-
-			if (tracknum == 0)
-				first_track_start = track_start;
-
-			m_q_track_start[tracknum] =
-					track_start + 150 - first_track_start;
-
-			logical_offset += track.postgap;
-			logical_offset += track.frames;
-
-			if ((m_source_toc.flags & cdrom_file::CD_FLAG_MULTISESSION)
-					&& m_info.track[tracknum].leadout != -1)
-			{
-				logical_offset += m_info.track[tracknum].leadout;
-			}
-		}
 	}
-
 	~chd_cd_compressor()
 	{
 	}
@@ -603,24 +565,30 @@ while (length_remaining != 0 && offset < endoffs)
 			if (trackinfo.subsize == 0
 					&& !(m_source_toc.flags & cdrom_file::CD_FLAG_GDROM))
 			{
-				const int64_t stored_pregap =
-						trackinfo.pgdatasize != 0
-							? int64_t(trackinfo.pregap)
-							: 0;
+								const uint64_t physical_frame =
+						uint64_t(m_source_toc.tracks[tracknum].physframeofs)
+							+ frame_in_track;
 
-				const int64_t track_frame =
-						int64_t(frame_in_track) - stored_pregap;
+				const std::optional<cdrom_file::disc_position> disc_position =
+						cdrom_file::disc_position_from_sector_position(
+								m_source_disc,
+								cdrom_file::sector_position{
+										int64_t(physical_frame) });
 
-				const int64_t absolute_frame =
-						m_q_track_start[tracknum] + track_frame;
+				if (!disc_position.has_value())
+				{
+					report_error(
+							1,
+							"Unable to map track %d frame %" I64FMT "u to canonical CD position",
+							tracknum + 1,
+							frame_in_track);
+				}
 
 				cdrom_file::q_position position;
 
 				if (!cdrom_file::make_subcode_q_position(
-						m_source_toc,
-						tracknum,
-						track_frame,
-						absolute_frame,
+						m_source_disc,
+						*disc_position,
 						position))
 				{
 					report_error(
@@ -658,11 +626,11 @@ while (length_remaining != 0 && offset < endoffs)
 
 private:
 	// internal state
-	std::string                   m_lastfile;
-	util::core_file::ptr          m_file;
-	const cdrom_file::toc &       m_source_toc;
-	cdrom_file::track_input_info &m_info;
-	std::array<int64_t, cdrom_file::MAX_TRACKS> m_q_track_start = { };
+	std::string                    m_lastfile;
+	util::core_file::ptr           m_file;
+	const cdrom_file::toc &        m_source_toc;
+	const cdrom_file::disc &       m_source_disc;
+	cdrom_file::track_input_info & m_info;
 };
 
 
@@ -2325,6 +2293,9 @@ static void do_create_cd(parameters_map &params)
 			report_error(1, "Error adjusting high density area: (%s: %s)\n", *input_file_str->second, err.message());
 	}
 
+	cdrom_file source_cd(*input_file_str->second);
+	const cdrom_file::disc &source_disc = source_cd.get_disc();
+
 	// process output CHD
 	chd_file output_parent;
 	const auto output_chd_str = parse_output_chd_parameters(params, output_parent);
@@ -2387,7 +2358,10 @@ static void do_create_cd(parameters_map &params)
 	try
 	{
 		// create the new CD
-		auto chd = std::make_unique<chd_cd_compressor>(source_toc, track_info);
+		auto chd = std::make_unique<chd_cd_compressor>(
+				source_toc,
+				source_disc,
+				track_info);
 		create_output_chd(*chd, *output_chd_str, uint64_t(totalsectors) * cdrom_file::FRAME_SIZE, hunk_size, cdrom_file::FRAME_SIZE, compression, output_parent);
 
 		// add the standard CD metadata; we do this even if we have a parent because it might be different
