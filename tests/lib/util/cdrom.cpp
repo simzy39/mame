@@ -3310,6 +3310,88 @@ TEST_CASE("CD-ROM canonical lead-out Q boundaries", "[util][cdrom]")
 	}
 }
 
+TEST_CASE("CD-ROM canonical multisession lead-out Q generation", "[util][cdrom]")
+{
+	const std::filesystem::path tempdir =
+			std::filesystem::temp_directory_path() / "mame-cdrom-multisession-lead-out-q-test";
+	const std::filesystem::path track1path = tempdir / "session1.bin";
+	const std::filesystem::path track2path = tempdir / "session2.bin";
+	const std::filesystem::path cuepath = tempdir / "sessions.cue";
+
+	std::filesystem::remove_all(tempdir);
+	std::filesystem::create_directories(tempdir);
+
+	{
+		std::ofstream bin(track1path, std::ios::binary);
+		const std::vector<char> data(75 * 2352, 0);
+		bin.write(data.data(), data.size());
+	}
+
+	{
+		std::ofstream bin(track2path, std::ios::binary);
+		const std::vector<char> data(75 * 2352, 0);
+		bin.write(data.data(), data.size());
+	}
+
+	{
+		std::ofstream cue(cuepath);
+		cue <<
+				"REM SESSION 1\n"
+				"FILE \"session1.bin\" BINARY\n"
+				"  TRACK 01 AUDIO\n"
+				"    FLAGS PRE DCP 4CH\n"
+				"    INDEX 01 00:00:00\n"
+				"REM LEAD-OUT 00:30:00\n"
+				"REM SESSION 2\n"
+				"REM LEAD-IN 01:00:00\n"
+				"FILE \"session2.bin\" BINARY\n"
+				"  TRACK 02 AUDIO\n"
+				"    INDEX 01 00:00:00\n";
+	}
+
+	cdrom_file cd(cuepath.string());
+
+	const cdrom_file::disc disc = cd.get_disc();
+
+	REQUIRE(disc.sessions.size() == 2);
+	REQUIRE(disc.sessions[0].lead_out.has_value());
+	REQUIRE(disc.sessions[0].lead_out->start.frame == 75);
+	REQUIRE(disc.sessions[0].lead_out->frames.has_value());
+	REQUIRE(*disc.sessions[0].lead_out->frames == 2250);
+
+	uint8_t q[12];
+
+	// First frame of session 1's intermediate lead-out.
+	REQUIRE(cd.get_subcode_q(75, q));
+
+	REQUIRE(cdrom_file::classify_subcode_q(q) == cdrom_file::q_type::lead_out);
+
+	REQUIRE(q[1] == 0xaa);
+	REQUIRE(q[2] == 0x01);
+
+	// Relative lead-out time starts at 00:00:00.
+	REQUIRE(q[3] == 0x00);
+	REQUIRE(q[4] == 0x00);
+	REQUIRE(q[5] == 0x00);
+
+	// Track 1 INDEX 01 is absolute 00:02:00, so disc frame 75 is 00:03:00.
+	REQUIRE(q[7] == 0x00);
+	REQUIRE(q[8] == 0x03);
+	REQUIRE(q[9] == 0x00);
+
+	REQUIRE((q[0] & 0x0f) == cdrom_file::CD_FLAG_ADR_START_TIME);
+
+	REQUIRE(
+			(q[0] >> 4)
+				== (cdrom_file::CD_FLAG_CONTROL_PREEMPHASIS
+					| cdrom_file::CD_FLAG_CONTROL_DIGITAL_COPY_PERMITTED
+					| cdrom_file::CD_FLAG_CONTROL_4CH));
+
+	require_valid_q_crc(q);
+
+	std::filesystem::remove_all(tempdir);
+}
+
 TEST_CASE("CD-ROM Q position generation", "[util][cdrom]")
 {
 	cdrom_file::disc_track track;
