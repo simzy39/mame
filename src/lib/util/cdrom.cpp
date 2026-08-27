@@ -1363,24 +1363,6 @@ uint32_t cdrom_file::get_track(uint32_t frame) const
 	return track ? track->number - 1 : 0;
 }
 
-uint32_t cdrom_file::get_track_index(const track_info &track, uint32_t frame)
-{
-	uint32_t index = 1;
-
-	for (int i = 2; i <= MAX_INDEX; i++)
-	{
-		if (track.idx[i] == -1)
-			continue;
-
-		if (frame >= uint32_t(track.idx[i]))
-			index = i;
-		else
-			break;
-	}
-
-	return index;
-}
-
 uint16_t cdrom_file::subcode_q_crc(const uint8_t *data)
 {
 	return calculate_q_crc(data);
