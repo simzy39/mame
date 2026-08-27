@@ -1187,6 +1187,7 @@ bool cdrom_file::make_subcode_q_position(
 bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) const
 {
 	uint32_t tracknum = 0;
+	const disc_track *canonical_track = nullptr;
 	const region *canonical_region = nullptr;
 
 	if (phys)
@@ -1196,9 +1197,8 @@ bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) c
 	else
 	{
 
-		const disc_position position{ int32_t(lbasector) };
-		const disc_track *const canonical_track =
-				find_track(m_disc, position);
+				const disc_position position{ int32_t(lbasector) };
+		canonical_track = find_track(m_disc, position);
 
 		if (canonical_track)
 		{
@@ -1235,24 +1235,41 @@ bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) c
 		if (!uncaptured_pregap && track.subsize != 0)
 		return false;
 
-	const uint32_t track_start =
-		phys
-			? track.physframeofs
-				+ ((track.pgdatasize != 0) ? track.pregap : 0)
-			: track.logframeofs;
-
-	// Signed position relative to INDEX 01.  Negative values are INDEX 00.
-	const int64_t track_frame =
-			int64_t(lbasector) - int64_t(track_start);
-
-	// Normalize physical addressing onto the logical disc timeline.
-	int64_t logical_frame = lbasector;
+		int64_t track_frame;
+	int64_t logical_frame;
 
 	if (phys)
 	{
+		const uint32_t track_start =
+				track.physframeofs
+					+ ((track.pgdatasize != 0) ? track.pregap : 0);
+
+		track_frame =
+				int64_t(lbasector) - int64_t(track_start);
+
 		logical_frame =
 				int64_t(track.logframeofs)
 					+ track_frame;
+	}
+	else
+	{
+		if (!canonical_track)
+			return false;
+
+		const auto index01 = std::find_if(
+				canonical_track->indexes.begin(),
+				canonical_track->indexes.end(),
+				[](const index &entry)
+				{
+					return entry.number == 1;
+				});
+
+		if (index01 == canonical_track->indexes.end())
+			return false;
+
+		logical_frame = int64_t(lbasector);
+		track_frame =
+				logical_frame - int64_t(index01->start.frame);
 	}
 
 	// Track 1 INDEX 01 corresponds to absolute 00:02:00.
