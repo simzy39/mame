@@ -1287,6 +1287,82 @@ TEST_CASE("CD-ROM canonical sector reads do not double-apply stored pregap", "[u
 	std::filesystem::remove_all(tempdir);
 }
 
+TEST_CASE("CD-ROM physical sector reads use canonical disc mapping", "[util][cdrom]")
+{
+	const std::filesystem::path tempdir =
+			std::filesystem::temp_directory_path() / "mame-cdrom-canonical-physical-read-test";
+	const std::filesystem::path binpath = tempdir / "virtual.bin";
+	const std::filesystem::path tocpath = tempdir / "virtual.toc";
+
+	std::filesystem::remove_all(tempdir);
+	std::filesystem::create_directories(tempdir);
+
+	{
+		std::ofstream bin(binpath, std::ios::binary);
+		std::array<uint8_t, 2352> sector{};
+
+		for (int frame = 0; frame < 75; frame++)
+		{
+			sector.fill(uint8_t(frame + 1));
+			bin.write(
+					reinterpret_cast<const char *>(sector.data()),
+					sector.size());
+		}
+	}
+
+	{
+		std::ofstream toc(tocpath);
+		toc <<
+				"CD_DA\n"
+				"\n"
+				"TRACK AUDIO\n"
+				"START 00:02:00\n"
+				"DATAFILE \"virtual.bin\" 00:00:00 00:01:00\n";
+	}
+
+	cdrom_file cd(tocpath.string());
+	std::array<uint8_t, 2352> sector{};
+
+	// Physical frame zero is backing storage for logical disc frame 150.
+	// Physical reads must first resolve that canonical disc position.
+	REQUIRE(cd.read_data(
+			0,
+			sector.data(),
+			cdrom_file::CD_TRACK_AUDIO,
+			true));
+
+	REQUIRE(sector[0] == uint8_t(1));
+	REQUIRE(sector[2351] == uint8_t(1));
+
+	// The mapping remains linear within the captured program region.
+	REQUIRE(cd.read_data(
+			1,
+			sector.data(),
+			cdrom_file::CD_TRACK_AUDIO,
+			true));
+
+	REQUIRE(sector[0] == uint8_t(2));
+	REQUIRE(sector[2351] == uint8_t(2));
+
+	REQUIRE(cd.read_data(
+			74,
+			sector.data(),
+			cdrom_file::CD_TRACK_AUDIO,
+			true));
+
+	REQUIRE(sector[0] == uint8_t(75));
+	REQUIRE(sector[2351] == uint8_t(75));
+
+	// There is no backing sector 75.
+	REQUIRE_FALSE(cd.read_data(
+			75,
+			sector.data(),
+			cdrom_file::CD_TRACK_AUDIO,
+			true));
+
+	std::filesystem::remove_all(tempdir);
+}
+
 TEST_CASE("CD-ROM canonical subcode reads do not double-apply stored pregap", "[util][cdrom]")
 {
 	const std::filesystem::path tempdir =
