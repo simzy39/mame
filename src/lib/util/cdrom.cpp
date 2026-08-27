@@ -49,11 +49,221 @@
 
 #define LOG(x) do { if (VERBOSE) { osd_printf_info x; } } while (0)
 
+namespace {
 
+constexpr uint32_t CDM1_HEADER_MAGIC_OFFSET = 0;
+constexpr uint32_t CDM1_HEADER_MAJOR_OFFSET = 4;
+constexpr uint32_t CDM1_HEADER_MINOR_OFFSET = 6;
+constexpr uint32_t CDM1_HEADER_SIZE_OFFSET = 8;
+constexpr uint32_t CDM1_HEADER_TOTAL_SIZE_OFFSET = 12;
+constexpr uint32_t CDM1_HEADER_SECTION_COUNT_OFFSET = 16;
+constexpr uint32_t CDM1_HEADER_DIRECTORY_OFFSET = 20;
+constexpr uint32_t CDM1_HEADER_FLAGS_OFFSET = 24;
+constexpr uint32_t CDM1_HEADER_RESERVED32_OFFSET = 28;
+constexpr uint32_t CDM1_HEADER_RESERVED64_OFFSET = 32;
+
+constexpr uint32_t CDM1_SECTION_TYPE_OFFSET = 0;
+constexpr uint32_t CDM1_SECTION_VERSION_OFFSET = 4;
+constexpr uint32_t CDM1_SECTION_FLAGS_OFFSET = 6;
+constexpr uint32_t CDM1_SECTION_OFFSET_OFFSET = 8;
+constexpr uint32_t CDM1_SECTION_LENGTH_OFFSET = 12;
+constexpr uint32_t CDM1_SECTION_COUNT_OFFSET = 16;
+constexpr uint32_t CDM1_SECTION_RESERVED_OFFSET = 20;
+
+constexpr std::array<cdrom_file::cdm1_section, 7> CDM1_REQUIRED_SECTIONS =
+{
+	cdrom_file::cdm1_section::disc,
+	cdrom_file::cdm1_section::sessions,
+	cdrom_file::cdm1_section::tracks,
+	cdrom_file::cdm1_section::indexes,
+	cdrom_file::cdm1_section::regions,
+	cdrom_file::cdm1_section::evidence,
+	cdrom_file::cdm1_section::mappings
+};
+
+bool ranges_overlap(
+		uint32_t start1,
+		uint32_t length1,
+		uint32_t start2,
+		uint32_t length2)
+{
+	const uint64_t end1 = uint64_t(start1) + length1;
+	const uint64_t end2 = uint64_t(start2) + length2;
+
+	return uint64_t(start1) < end2 && uint64_t(start2) < end1;
+}
+
+} // anonymous namespace
 
 /***************************************************************************
     INLINE FUNCTIONS
 ***************************************************************************/
+
+std::error_condition cdrom_file::validate_cdm1_metadata(
+		const std::vector<uint8_t> &metadata)
+{
+	if (metadata.size() < CDM1_HEADER_BYTES)
+		return chd_file::error::INVALID_DATA;
+
+	const uint8_t *const data = metadata.data();
+
+	if (get_u32be(data + CDM1_HEADER_MAGIC_OFFSET) != CDM1_MAGIC)
+		return chd_file::error::INVALID_DATA;
+
+	if (get_u16be(data + CDM1_HEADER_MAJOR_OFFSET) != CDM1_VERSION_MAJOR)
+		return chd_file::error::UNSUPPORTED_VERSION;
+
+	const uint16_t minor =
+			get_u16be(data + CDM1_HEADER_MINOR_OFFSET);
+	(void)minor;
+
+	const uint32_t header_bytes =
+			get_u32be(data + CDM1_HEADER_SIZE_OFFSET);
+	const uint32_t total_bytes =
+			get_u32be(data + CDM1_HEADER_TOTAL_SIZE_OFFSET);
+	const uint32_t section_count =
+			get_u32be(data + CDM1_HEADER_SECTION_COUNT_OFFSET);
+	const uint32_t directory_offset =
+			get_u32be(data + CDM1_HEADER_DIRECTORY_OFFSET);
+	const uint32_t header_flags =
+			get_u32be(data + CDM1_HEADER_FLAGS_OFFSET);
+
+	if (header_bytes < CDM1_HEADER_BYTES
+			|| header_bytes > metadata.size()
+			|| (header_bytes & 7)
+			|| (minor == CDM1_VERSION_MINOR
+				&& header_bytes != CDM1_HEADER_BYTES))
+	{
+		return chd_file::error::INVALID_DATA;
+	}
+
+	if (total_bytes != metadata.size())
+		return chd_file::error::INVALID_DATA;
+
+	if (header_flags != 0
+			|| get_u32be(data + CDM1_HEADER_RESERVED32_OFFSET) != 0
+			|| get_u64be(data + CDM1_HEADER_RESERVED64_OFFSET) != 0)
+	{
+		return chd_file::error::INVALID_DATA;
+	}
+
+	if (section_count < CDM1_REQUIRED_SECTIONS.size())
+		return chd_file::error::INVALID_DATA;
+
+	if ((directory_offset & 7)
+			|| directory_offset < header_bytes
+			|| directory_offset > total_bytes)
+	{
+		return chd_file::error::INVALID_DATA;
+	}
+
+	if (section_count
+			> (uint64_t(total_bytes) - directory_offset)
+					/ CDM1_SECTION_ENTRY_BYTES)
+	{
+		return chd_file::error::INVALID_DATA;
+	}
+
+	const uint64_t directory_bytes =
+			uint64_t(section_count) * CDM1_SECTION_ENTRY_BYTES;
+	const uint64_t directory_end =
+			uint64_t(directory_offset) + directory_bytes;
+
+	if (directory_end > total_bytes)
+		return chd_file::error::INVALID_DATA;
+
+	for (uint32_t i = 0; i < section_count; i++)
+	{
+		const uint8_t *const entry =
+				data
+				+ directory_offset
+				+ uint64_t(i) * CDM1_SECTION_ENTRY_BYTES;
+
+		const uint32_t type =
+				get_u32be(entry + CDM1_SECTION_TYPE_OFFSET);
+		const uint16_t version =
+				get_u16be(entry + CDM1_SECTION_VERSION_OFFSET);
+		const uint16_t flags =
+				get_u16be(entry + CDM1_SECTION_FLAGS_OFFSET);
+		const uint32_t offset =
+				get_u32be(entry + CDM1_SECTION_OFFSET_OFFSET);
+		const uint32_t length =
+				get_u32be(entry + CDM1_SECTION_LENGTH_OFFSET);
+
+		if (flags & ~uint16_t(cdm1_section_flag::required))
+			return chd_file::error::INVALID_DATA;
+
+		if (get_u32be(entry + CDM1_SECTION_RESERVED_OFFSET) != 0)
+			return chd_file::error::INVALID_DATA;
+
+		if ((offset & 7)
+				|| uint64_t(offset) + length > total_bytes
+				|| ranges_overlap(
+						offset,
+						length,
+						0,
+						header_bytes)
+				|| ranges_overlap(
+						offset,
+						length,
+						directory_offset,
+						uint32_t(directory_bytes)))
+		{
+			return chd_file::error::INVALID_DATA;
+		}
+
+		if (i < CDM1_REQUIRED_SECTIONS.size())
+		{
+			if (type != uint32_t(CDM1_REQUIRED_SECTIONS[i])
+					|| version != 1
+					|| !(flags & uint16_t(cdm1_section_flag::required))
+					|| length == 0)
+			{
+				return chd_file::error::INVALID_DATA;
+			}
+		}
+			else if (flags & uint16_t(cdm1_section_flag::required))
+		{
+			return chd_file::error::UNSUPPORTED_FORMAT;
+		}
+
+		for (uint32_t previous = 0; previous < i; previous++)
+		{
+			const uint8_t *const previous_entry =
+					data
+					+ directory_offset
+					+ uint64_t(previous) * CDM1_SECTION_ENTRY_BYTES;
+
+			const uint32_t previous_type =
+					get_u32be(
+							previous_entry
+							+ CDM1_SECTION_TYPE_OFFSET);
+
+			if (type == previous_type)
+				return chd_file::error::INVALID_DATA;
+			
+			const uint32_t previous_offset =
+					get_u32be(
+							previous_entry
+							+ CDM1_SECTION_OFFSET_OFFSET);
+			const uint32_t previous_length =
+					get_u32be(
+							previous_entry
+							+ CDM1_SECTION_LENGTH_OFFSET);
+
+			if (ranges_overlap(
+					offset,
+					length,
+					previous_offset,
+					previous_length))
+			{
+				return chd_file::error::INVALID_DATA;
+			}
+		}
+	}
+
+	return std::error_condition();
+}
 
 /*-------------------------------------------------
     physical_to_chd_lba - translate a physical
