@@ -120,6 +120,78 @@ public:
 		captured_position captured;
 	};
 
+        // CDM1 canonical CD metadata schema.
+        static constexpr uint16_t CDM1_VERSION_MAJOR = 1;
+        static constexpr uint16_t CDM1_VERSION_MINOR = 0;
+
+        enum class cdm1_section : uint32_t
+        {
+                disc     = 0x44495343, // DISC
+                sessions = 0x53455353, // SESS
+                tracks   = 0x5452414b, // TRAK
+                indexes  = 0x494e4458, // INDX
+                regions  = 0x5245474e, // REGN
+                evidence = 0x45564944, // EVID
+                mappings = 0x4d415053  // MAPS
+        };
+
+        enum class cdm1_section_flag : uint16_t
+        {
+                required = 0x0001
+        };
+
+        enum class cdm1_region_owner : uint8_t
+        {
+                session = 1,
+                track = 2
+        };
+
+        enum class cdm1_region_kind : uint8_t
+        {
+                lead_in = 1,
+                pregap = 2,
+                program = 3,
+                postgap = 4,
+                lead_out = 5
+        };
+
+        enum class cdm1_length_state : uint8_t
+        {
+                unknown = 0,
+                known = 1
+        };
+
+        enum class cdm1_evidence_class : uint16_t
+        {
+                decoded_main = 1,
+                raw_pw = 2
+        };
+
+        enum class cdm1_storage_class : uint16_t
+        {
+                chdv5_unit_slice = 1
+        };
+
+        enum class cdm1_mapping_class : uint16_t
+        {
+                linear_interval = 1
+        };
+
+        enum class cdm1_provenance : uint8_t
+        {
+                unknown = 0,
+                captured = 1,
+                derived = 2,
+                generated = 3
+        };
+
+        enum class cdm1_semantic_source : uint8_t
+        {
+                unknown = 0,
+                explicit_fallback = 1,
+                derived_capture = 2
+        };
+
 	enum class region_kind
 	{
 		lead_in,
