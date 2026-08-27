@@ -1256,6 +1256,9 @@ bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) c
 		return false;
 	}
 
+	if (!phys)
+		position.index = get_track_index(lbasector);
+	
 	encode_subcode_q(position, buffer);
 	return true;
 }
