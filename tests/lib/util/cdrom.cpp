@@ -1420,6 +1420,32 @@ TEST_CASE("CD-ROM canonical subcode reads do not double-apply stored pregap", "[
 	uint8_t subcode[96];
 	uint8_t q[12];
 
+		// The pregap has no captured subcode backing in this descriptor.
+	REQUIRE_FALSE(cd.read_subcode(0, subcode, true));
+
+	// Physical frame 150 is captured program subcode at canonical INDEX 01.
+	REQUIRE(cd.read_subcode(150, subcode, true));
+	cdrom_file::unpack_subcode_q(subcode, q);
+	REQUIRE(q[5] == uint8_t(150));
+	REQUIRE(q[9] == uint8_t(150));
+	require_valid_q_crc(q);
+
+	// Physical mapping remains linear through the captured program region.
+	REQUIRE(cd.read_subcode(151, subcode, true));
+	cdrom_file::unpack_subcode_q(subcode, q);
+	REQUIRE(q[5] == uint8_t(151));
+	REQUIRE(q[9] == uint8_t(151));
+	require_valid_q_crc(q);
+
+	REQUIRE(cd.read_subcode(299, subcode, true));
+	cdrom_file::unpack_subcode_q(subcode, q);
+	REQUIRE(q[5] == uint8_t(299));
+	REQUIRE(q[9] == uint8_t(299));
+	require_valid_q_crc(q);
+
+	// There is no physical backing frame 300.
+	REQUIRE_FALSE(cd.read_subcode(300, subcode, true));
+
 	// The first stored pregap subcode is backing frame 0.
 	REQUIRE(cd.get_subcode_raw(0, subcode));
 	cdrom_file::unpack_subcode_q(subcode, q);
@@ -1481,6 +1507,13 @@ TEST_CASE("CD-ROM Q subchannel later-track stored pregap", "[util][cdrom]")
 	}
 
 	cdrom_file cd(cuepath.string());
+
+	// Public logical track starts come from canonical INDEX 01 positions.
+	REQUIRE(cd.get_track_start(0) == 0);
+	REQUIRE(cd.get_track_start(1) == 375);
+
+	// The final lead-out begins at the logical end of the complete disc.
+	REQUIRE(cd.get_track_start(0xaa) == 675);
 
 		const cdrom_file::disc disc = cd.get_disc();
 
