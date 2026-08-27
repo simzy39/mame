@@ -1920,19 +1920,50 @@ void cdrom_file::reconstruct_track_indexes()
 		int highest_index = 1;
 		uint32_t pending_frame = 0;
 
-		const uint32_t index01_frame =
-		(track.pgdatasize != 0) ? track.pregap : 0;
+				const disc_track *const canonical_track =
+				(tracknum < m_disc.tracks.size())
+					? &m_disc.tracks[tracknum]
+					: nullptr;
 
-		for (uint32_t frame = 0; frame < track.frames; frame++)
+		if (!canonical_track)
+			continue;
+
+		const auto program = std::find_if(
+				canonical_track->regions.begin(),
+				canonical_track->regions.end(),
+				[](const region &entry)
+				{
+					return entry.kind == region_kind::program;
+				});
+
+		if (program == canonical_track->regions.end()
+				|| !program->frames.has_value())
 		{
-			const uint32_t physframe = track.physframeofs + frame;
+			continue;
+		}
+
+		const auto index01 = std::find_if(
+				canonical_track->indexes.begin(),
+				canonical_track->indexes.end(),
+				[](const index &entry)
+				{
+					return entry.number == 1;
+				});
+
+		if (index01 == canonical_track->indexes.end())
+			continue;
+
+		for (uint32_t frame = 0; frame < *program->frames; frame++)
+		{
+			const disc_position discpos{
+					int32_t(int64_t(program->start.frame) + frame) };
 
 			uint8_t q[12];
 			q_position position;
 
-			if (!get_subcode_q(physframe, q, true)
+			if (!get_subcode_q(uint32_t(discpos.frame), q)
 					|| !decode_subcode_q(q, position)
-					|| position.track != tracknum + 1)
+					|| position.track != canonical_track->number)
 			{
 				pending_index = -1;
 				continue;
@@ -1964,11 +1995,16 @@ if (position.index == previous_index)
 // treating it as a real transition.  Record the first observed frame.
 if (pending_index == position.index)
 {
-	if (position.index > highest_index
+		if (position.index > highest_index
 			&& track.idx[position.index] == -1
-			&& pending_frame >= index01_frame)
+			&& (int64_t(program->start.frame) + pending_frame)
+					>= int64_t(index01->start.frame))
 	{
-		track.idx[position.index] = pending_frame - index01_frame;
+		track.idx[position.index] =
+				int32_t(
+						int64_t(program->start.frame)
+							+ pending_frame
+							- int64_t(index01->start.frame));
 		highest_index = position.index;
 	}
 
@@ -1983,9 +2019,14 @@ else
 			&& position.index > pending_index
 			&& pending_index > highest_index
 			&& track.idx[pending_index] == -1
-			&& pending_frame >= index01_frame)
+			&& (int64_t(program->start.frame) + pending_frame)
+					>= int64_t(index01->start.frame))
 	{
-		track.idx[pending_index] = pending_frame - index01_frame;
+		track.idx[pending_index] =
+				int32_t(
+						int64_t(program->start.frame)
+							+ pending_frame
+							- int64_t(index01->start.frame));
 		highest_index = pending_index;
 		previous_index = pending_index;
 	}
