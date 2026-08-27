@@ -1438,10 +1438,21 @@ uint32_t cdrom_file::get_track_index(uint32_t frame) const
 		}
 	}
 
-	// Descriptor-backed images, and CHDs without usable position Q,
-	// fall back to the semantic index table.
-	const uint32_t track_start = get_track_start(track);
-	return get_track_index(trackinfo, frame - track_start);
+		// Descriptor-backed images, and CHDs without usable position Q,
+	// fall back to the canonical semantic index table.
+	const index *canonical_index = nullptr;
+
+	for (const index &entry : canonical_track->indexes)
+	{
+		if (entry.start.frame <= position.frame
+				&& (!canonical_index
+					|| entry.start.frame > canonical_index->start.frame))
+		{
+			canonical_index = &entry;
+		}
+	}
+
+	return canonical_index ? canonical_index->number : 1;
 }
 
 const cdrom_file::disc &cdrom_file::get_disc() const
