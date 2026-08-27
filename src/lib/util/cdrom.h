@@ -518,7 +518,6 @@ private:
 	util::random_read::ptr fhandle[MAX_TRACKS];/* file handle */
 
 	inline uint32_t physical_to_chd_lba(uint32_t physlba, uint32_t &tracknum) const;
-	static uint32_t get_track_index(const track_info &track, uint32_t frame);
 	static uint16_t subcode_q_crc(const uint8_t *data);
 
 	static void reset_toc(toc &toc);
