@@ -301,6 +301,7 @@ cdrom_file::cdrom_file(chd_file *_chd)
 		track.chdframeofs = chdofs;
 		track.logframes = 0;
 		
+		m_disc = build_disc();
 		reconstruct_track_indexes();
 		m_disc = build_disc();
 		}
