@@ -1132,39 +1132,54 @@ bool cdrom_file::apply_q_toc_semantics(
 }
 
 bool cdrom_file::make_subcode_q_position(
-		const toc &toc,
-		uint32_t tracknum,
+		const disc_track &track,
+		disc_position position,
 		int64_t track_frame,
 		int64_t absolute_frame,
-		q_position &position)
+		q_position &q)
 {
-	if (tracknum >= toc.numtrks || absolute_frame < 0)
+	if (absolute_frame < 0)
 		return false;
-
-	const track_info &track = toc.tracks[tracknum];
 
 	uint8_t adr_control =
 			(CD_FLAG_ADR_START_TIME << 4)
 				| (track.control_flags & 0x0f);
 
-	if (track.trktype != CD_TRACK_AUDIO)
+	if (track.type != CD_TRACK_AUDIO)
 		adr_control |= CD_FLAG_CONTROL_DATA_TRACK;
 
-	position.adr_control = adr_control;
-	position.track = tracknum + 1;
+	q.adr_control = adr_control;
+	q.track = track.number;
 
-	if (track_frame < 0)
+	const region *const canonical_region =
+			find_region(track, position);
+
+	if (canonical_region
+			&& canonical_region->kind == region_kind::pregap)
 	{
-		position.index = 0;
-		position.relative_frame = uint32_t(-track_frame);
+		q.index = 0;
+		q.relative_frame = uint32_t(-track_frame);
 	}
 	else
 	{
-		position.relative_frame = uint32_t(track_frame);
-		position.index = get_track_index(track, position.relative_frame);
+		q.relative_frame = uint32_t(track_frame);
+
+		const index *canonical_index = nullptr;
+
+		for (const index &entry : track.indexes)
+		{
+			if (entry.start.frame <= position.frame
+					&& (!canonical_index
+						|| entry.start.frame > canonical_index->start.frame))
+			{
+				canonical_index = &entry;
+			}
+		}
+
+		q.index = canonical_index ? canonical_index->number : 1;
 	}
 
-	position.absolute_frame = uint32_t(absolute_frame);
+	q.absolute_frame = uint32_t(absolute_frame);
 
 	return true;
 }
@@ -1244,22 +1259,27 @@ bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) c
 	const int64_t absolute_frame =
 			logical_frame + 150 - int64_t(cdtoc.tracks[0].logframeofs);
 
-	q_position position;
+		q_position q;
+
+	const disc_position discpos{ int32_t(logical_frame) };
+	const disc_track *const canonical_track =
+			find_track(m_disc, discpos);
+
+	if (!canonical_track)
+		return false;
 
 	if (!make_subcode_q_position(
-			cdtoc,
-			tracknum,
+			*canonical_track,
+			discpos,
 			track_frame,
 			absolute_frame,
-			position))
+			q))
 	{
 		return false;
 	}
 
-	if (!phys)
-		position.index = get_track_index(lbasector);
+	encode_subcode_q(q, buffer);
 	
-	encode_subcode_q(position, buffer);
 	return true;
 }
 
