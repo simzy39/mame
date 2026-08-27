@@ -1626,12 +1626,26 @@ cdrom_file::disc cdrom_file::build_disc() const
 		session.program_start =
 			disc_position{
 					int32_t(cdtoc.tracks[first_track].logframeofs) };
-
-		// The legacy TOC does not reliably retain actual session
-		// lead-in and lead-out positions.  Keep them unknown rather
-		// than reproducing assumptions made by individual drive layers.
+		// The legacy TOC does not reliably retain session lead-in
+		// positions or intermediate-session lead-out positions.
 		session.lead_in = std::nullopt;
 		session.lead_out = std::nullopt;
+
+		// The dummy TOC entry retains the logical end of the complete disc,
+		// which is the final session's lead-out start.
+		if (sessionnum + 1 == session_count)
+		{
+			region lead_out;
+			lead_out.kind = region_kind::lead_out;
+			lead_out.start =
+					disc_position{
+							int32_t(cdtoc.tracks[cdtoc.numtrks].logframeofs) };
+			lead_out.frames = std::nullopt;
+			lead_out.main_data = region_presence::unknown;
+			lead_out.subcode = region_presence::unknown;
+
+			session.lead_out = lead_out;
+		}
 
 		result.sessions.push_back(std::move(session));
 	}
