@@ -1221,6 +1221,99 @@ TEST_CASE("CD-ROM canonical disc model distinguishes virtual and stored pregaps"
 	std::filesystem::remove_all(tempdir);
 }
 
+TEST_CASE("CD-ROM canonical disc model preserves source session lead regions", "[util][cdrom]")
+{
+	const std::filesystem::path tempdir =
+			std::filesystem::temp_directory_path() / "mame-cdrom-session-lead-region-test";
+	const std::filesystem::path track1path = tempdir / "session1.bin";
+	const std::filesystem::path track2path = tempdir / "session2.bin";
+	const std::filesystem::path cuepath = tempdir / "sessions.cue";
+
+	std::filesystem::remove_all(tempdir);
+	std::filesystem::create_directories(tempdir);
+
+	{
+		std::ofstream bin(track1path, std::ios::binary);
+		const std::vector<char> data(75 * 2352, 0);
+		bin.write(data.data(), data.size());
+	}
+
+	{
+		std::ofstream bin(track2path, std::ios::binary);
+		const std::vector<char> data(75 * 2352, 0);
+		bin.write(data.data(), data.size());
+	}
+
+	{
+		std::ofstream cue(cuepath);
+		cue <<
+				"REM SESSION 1\n"
+				"FILE \"session1.bin\" BINARY\n"
+				"  TRACK 01 AUDIO\n"
+				"    INDEX 01 00:00:00\n"
+				"REM LEAD-OUT 00:30:00\n"
+				"REM SESSION 2\n"
+				"REM LEAD-IN 01:00:00\n"
+				"FILE \"session2.bin\" BINARY\n"
+				"  TRACK 02 AUDIO\n"
+				"    INDEX 01 00:00:00\n";
+	}
+
+	cdrom_file cd(cuepath.string());
+	const cdrom_file::disc disc = cd.get_disc();
+
+	REQUIRE(disc.sessions.size() == 2);
+	REQUIRE(disc.tracks.size() == 2);
+
+	const cdrom_file::disc_session &session1 = disc.sessions[0];
+
+	REQUIRE(session1.number == 1);
+	REQUIRE(session1.first_track == 1);
+	REQUIRE(session1.last_track == 1);
+	REQUIRE(session1.program_start.frame == 0);
+	REQUIRE_FALSE(session1.lead_in.has_value());
+
+	REQUIRE(session1.lead_out.has_value());
+	REQUIRE(session1.lead_out->kind == cdrom_file::region_kind::lead_out);
+	REQUIRE(session1.lead_out->start.frame == 75);
+	REQUIRE(session1.lead_out->frames.has_value());
+	REQUIRE(*session1.lead_out->frames == 2250);
+	REQUIRE(
+			session1.lead_out->main_data
+				== cdrom_file::region_presence::unknown);
+	REQUIRE(
+			session1.lead_out->subcode
+				== cdrom_file::region_presence::unknown);
+	REQUIRE(session1.lead_out->backing.empty());
+
+	const cdrom_file::disc_session &session2 = disc.sessions[1];
+
+	REQUIRE(session2.number == 2);
+	REQUIRE(session2.first_track == 2);
+	REQUIRE(session2.last_track == 2);
+	REQUIRE(session2.program_start.frame == 6825);
+
+	REQUIRE(session2.lead_in.has_value());
+	REQUIRE(session2.lead_in->kind == cdrom_file::region_kind::lead_in);
+	REQUIRE(session2.lead_in->start.frame == 2325);
+	REQUIRE(session2.lead_in->frames.has_value());
+	REQUIRE(*session2.lead_in->frames == 4500);
+	REQUIRE(
+			session2.lead_in->main_data
+				== cdrom_file::region_presence::unknown);
+	REQUIRE(
+			session2.lead_in->subcode
+				== cdrom_file::region_presence::unknown);
+	REQUIRE(session2.lead_in->backing.empty());
+
+	REQUIRE(session2.lead_out.has_value());
+	REQUIRE(session2.lead_out->kind == cdrom_file::region_kind::lead_out);
+	REQUIRE(session2.lead_out->start.frame == 6900);
+	REQUIRE_FALSE(session2.lead_out->frames.has_value());
+
+	std::filesystem::remove_all(tempdir);
+}
+
 TEST_CASE("CD-ROM canonical sector reads do not double-apply stored pregap", "[util][cdrom]")
 {
 	const std::filesystem::path tempdir =
