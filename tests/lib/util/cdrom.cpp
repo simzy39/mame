@@ -1306,6 +1306,33 @@ TEST_CASE("CD-ROM canonical disc model preserves source session lead regions", "
 				== cdrom_file::region_presence::unknown);
 	REQUIRE(session2.lead_in->backing.empty());
 
+		// Semantic session lead regions must not resolve to captured backing.
+	REQUIRE_FALSE(
+			cdrom_file::backing_sector_position(
+					disc,
+					session1.lead_out->start).has_value());
+	REQUIRE_FALSE(
+			cdrom_file::backing_channel_position(
+					disc,
+					session1.lead_out->start).has_value());
+	REQUIRE_FALSE(
+			cdrom_file::backing_subcode_position(
+					disc,
+					session1.lead_out->start).has_value());
+
+	REQUIRE_FALSE(
+			cdrom_file::backing_sector_position(
+					disc,
+					session2.lead_in->start).has_value());
+	REQUIRE_FALSE(
+			cdrom_file::backing_channel_position(
+					disc,
+					session2.lead_in->start).has_value());
+	REQUIRE_FALSE(
+			cdrom_file::backing_subcode_position(
+					disc,
+					session2.lead_in->start).has_value());
+	
 	REQUIRE(session2.lead_out.has_value());
 	REQUIRE(session2.lead_out->kind == cdrom_file::region_kind::lead_out);
 	REQUIRE(session2.lead_out->start.frame == 6900);
