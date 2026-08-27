@@ -363,6 +363,10 @@ public:
 			int64_t track_frame,
 			int64_t absolute_frame,
 			q_position &q);
+	static bool make_subcode_q_position(
+			const disc &disc,
+			disc_position position,
+			q_position &q);
 	static bool make_subcode_q_lead_out(
 			const disc_track &track,
 			const region &lead_out,
