@@ -3260,3 +3260,83 @@ TEST_CASE("CD-ROM Q position generation", "[util][cdrom]")
 				position));
 	}
 }
+
+TEST_CASE("CD-ROM Q position generation preserves canonical control flags", "[util][cdrom]")
+{
+	cdrom_file::disc_track track;
+	track.number = 1;
+	track.session = 1;
+	track.type = cdrom_file::CD_TRACK_AUDIO;
+	track.control_flags =
+			cdrom_file::CD_FLAG_CONTROL_PREEMPHASIS
+				| cdrom_file::CD_FLAG_CONTROL_DIGITAL_COPY_PERMITTED
+				| cdrom_file::CD_FLAG_CONTROL_4CH;
+
+	track.regions.push_back(
+			{
+				cdrom_file::region_kind::program,
+				{ 150 },
+				75,
+				cdrom_file::region_presence::captured,
+				cdrom_file::region_presence::unknown,
+				{}
+			});
+
+	track.indexes.push_back({ 1, { 150 } });
+
+	cdrom_file::q_position position;
+
+	REQUIRE(cdrom_file::make_subcode_q_position(
+			track,
+			{ 150 },
+			0,
+			150,
+			position));
+
+	REQUIRE(
+			position.adr_control
+				== ((cdrom_file::CD_FLAG_ADR_START_TIME << 4)
+					| cdrom_file::CD_FLAG_CONTROL_PREEMPHASIS
+					| cdrom_file::CD_FLAG_CONTROL_DIGITAL_COPY_PERMITTED
+					| cdrom_file::CD_FLAG_CONTROL_4CH));
+
+	uint8_t q[12];
+	cdrom_file::encode_subcode_q(position, q);
+
+	REQUIRE((q[0] & 0x0f) == cdrom_file::CD_FLAG_ADR_START_TIME);
+	REQUIRE(
+			(q[0] >> 4)
+				== (cdrom_file::CD_FLAG_CONTROL_PREEMPHASIS
+					| cdrom_file::CD_FLAG_CONTROL_DIGITAL_COPY_PERMITTED
+					| cdrom_file::CD_FLAG_CONTROL_4CH));
+
+	cdrom_file::q_position decoded;
+
+	REQUIRE(cdrom_file::decode_subcode_q(q, decoded));
+	REQUIRE(decoded.adr_control == position.adr_control);
+
+	SECTION("data track adds data control flag")
+	{
+		track.type = cdrom_file::CD_TRACK_MODE1;
+		track.control_flags = 0;
+
+		REQUIRE(cdrom_file::make_subcode_q_position(
+				track,
+				{ 150 },
+				0,
+				150,
+				position));
+
+		REQUIRE(
+				position.adr_control
+					== ((cdrom_file::CD_FLAG_ADR_START_TIME << 4)
+						| cdrom_file::CD_FLAG_CONTROL_DATA_TRACK));
+
+		cdrom_file::encode_subcode_q(position, q);
+
+		REQUIRE((q[0] & 0x0f) == cdrom_file::CD_FLAG_ADR_START_TIME);
+		REQUIRE(
+				(q[0] >> 4)
+					== cdrom_file::CD_FLAG_CONTROL_DATA_TRACK);
+	}
+}
