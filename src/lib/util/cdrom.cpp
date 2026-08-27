@@ -56,33 +56,30 @@
 ***************************************************************************/
 
 /*-------------------------------------------------
-    physical_to_chd_lba - find the CHD LBA
-    and the track number
+    physical_to_chd_lba - translate a physical
+	track position to its CHD LBA
 -------------------------------------------------*/
 
 /**
- * @fn  static inline uint32_t physical_to_chd_lba(uint32_t physlba, uint32_t &tracknum)
+ * @fn  static inline uint32_t physical_to_chd_lba(uint32_t physlba, uint32_t tracknum)
  *
  * @brief   Physical to chd lba.
  *
  * @param   physlba             The physlba.
- * @param [in,out]  tracknum    The tracknum.
+ * @param   tracknum            The track number.
  *
  * @return  An uint32_t.
  */
 
-uint32_t cdrom_file::physical_to_chd_lba(uint32_t physlba, uint32_t &tracknum) const
+uint32_t cdrom_file::physical_to_chd_lba(
+		uint32_t physlba,
+		uint32_t tracknum) const
 {
-	// loop until our current LBA is less than the start LBA of the next track
-	for (int track = 0; track < cdtoc.numtrks; track++)
-		if (physlba < cdtoc.tracks[track + 1].physframeofs)
-		{
-			uint32_t chdlba = physlba - cdtoc.tracks[track].physframeofs + cdtoc.tracks[track].chdframeofs;
-			tracknum = track;
-			return chdlba;
-		}
+	const track_info &track = cdtoc.tracks[tracknum];
 
-	return physlba;
+	return physlba
+			- track.physframeofs
+			+ track.chdframeofs;
 }
 
 
