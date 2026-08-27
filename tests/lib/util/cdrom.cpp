@@ -1660,6 +1660,37 @@ TEST_CASE("CD-ROM Q subchannel packet classification", "[util][cdrom]")
 					== cdrom_file::q_type::catalog);
 	}
 
+	SECTION("catalog decode")
+	{
+		uint8_t q[12] =
+		{
+			0x02,
+			0x12, 0x34, 0x56, 0x78, 0x90, 0x12,
+			0x30,
+			0x00,
+			0x42,
+			0x00, 0x00
+		};
+	
+		update_crc(q);
+	
+		cdrom_file::q_catalog catalog;
+	
+		REQUIRE(cdrom_file::decode_subcode_q_catalog(q, catalog));
+	
+		const std::array<char, 13> expected =
+		{
+			'1', '2', '3', '4', '5', '6', '7',
+			'8', '9', '0', '1', '2', '3'
+		};
+	
+		REQUIRE(catalog.number == expected);
+		REQUIRE(catalog.absolute_frame == 42);
+		REQUIRE(
+				catalog.adr_control
+					== (cdrom_file::CD_FLAG_ADR_CATALOG_CODE << 4));
+	}
+	
 	SECTION("ISRC")
 	{
 		uint8_t q[12] = {};
