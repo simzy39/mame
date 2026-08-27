@@ -1316,31 +1316,39 @@ bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) c
 
 bool cdrom_file::get_subcode_raw(uint32_t lbasector, uint8_t *buffer, bool phys) const
 {
-	uint32_t tracknum = 0;
-	const region *canonical_region = nullptr;
+	disc_position position;
 
 	if (phys)
 	{
-		physical_to_chd_lba(lbasector, tracknum);
+		const std::optional<disc_position> canonical_position =
+				disc_position_from_sector_position(
+						m_disc,
+						sector_position{ int64_t(lbasector) });
+
+		if (!canonical_position.has_value())
+			return false;
+
+		position = *canonical_position;
 	}
 	else
 	{
-		const disc_position position{ int32_t(lbasector) };
-		const disc_track *const canonical_track =
-				find_track(m_disc, position);
-
-		if (canonical_track)
-		{
-			tracknum = canonical_track->number - 1;
-			canonical_region = find_region(*canonical_track, position);
-		}
+		position = disc_position{ int32_t(lbasector) };
 	}
 
+	const disc_track *const canonical_track =
+			find_track(m_disc, position);
+
+	if (!canonical_track)
+		return false;
+
+	const region *const canonical_region =
+			find_region(*canonical_track, position);
+
+	const uint32_t tracknum = canonical_track->number - 1;
 	const track_info &track = cdtoc.tracks[tracknum];
 
 	const bool uncaptured_pregap =
-			!phys
-				&& canonical_region
+			canonical_region
 				&& canonical_region->kind == region_kind::pregap
 				&& canonical_region->subcode != region_presence::captured;
 	
