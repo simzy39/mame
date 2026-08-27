@@ -1778,14 +1778,73 @@ cdrom_file::disc cdrom_file::build_disc() const
 		session.program_start =
 			disc_position{
 					int32_t(cdtoc.tracks[first_track].logframeofs) };
-		// The legacy TOC does not reliably retain session lead-in
-		// positions or intermediate-session lead-out positions.
-		session.lead_in = std::nullopt;
+
+				session.lead_in = std::nullopt;
 		session.lead_out = std::nullopt;
+
+		const int32_t leadin_frames =
+				cdtrack_info.track[first_track].leadin;
+
+		if (leadin_frames > 0)
+		{
+			region lead_in;
+			lead_in.kind = region_kind::lead_in;
+			lead_in.start =
+					disc_position{
+							int32_t(cdtoc.tracks[first_track].logframeofs)
+								- int32_t(cdtoc.tracks[first_track].pregap)
+								- leadin_frames };
+			lead_in.frames = uint32_t(leadin_frames);
+			lead_in.main_data = region_presence::unknown;
+			lead_in.subcode = region_presence::unknown;
+
+			session.lead_in = lead_in;
+		}
+
+		const int32_t leadout_frames =
+				cdtrack_info.track[last_track].leadout;
+
+		if (leadout_frames > 0)
+		{
+			const disc_track &canonical_last_track =
+					result.tracks[last_track];
+
+			const region *last_region = nullptr;
+
+			for (const region &candidate : canonical_last_track.regions)
+			{
+				if (!candidate.frames.has_value())
+					continue;
+
+				if (!last_region
+						|| candidate.start.frame
+								+ int32_t(*candidate.frames)
+							> last_region->start.frame
+								+ int32_t(*last_region->frames))
+				{
+					last_region = &candidate;
+				}
+			}
+
+			if (last_region)
+			{
+				region lead_out;
+				lead_out.kind = region_kind::lead_out;
+				lead_out.start =
+						disc_position{
+								last_region->start.frame
+									+ int32_t(*last_region->frames) };
+				lead_out.frames = uint32_t(leadout_frames);
+				lead_out.main_data = region_presence::unknown;
+				lead_out.subcode = region_presence::unknown;
+
+				session.lead_out = lead_out;
+			}
+		}
 
 		// The dummy TOC entry retains the logical end of the complete disc,
 		// which is the final session's lead-out start.
-		if (sessionnum + 1 == session_count)
+		if (!session.lead_out && sessionnum + 1 == session_count)
 		{
 			region lead_out;
 			lead_out.kind = region_kind::lead_out;
