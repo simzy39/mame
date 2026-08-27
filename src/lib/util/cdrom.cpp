@@ -1396,11 +1396,75 @@ bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) c
 		discpos = disc_position{ int32_t(lbasector) };
 	}
 
-	const disc_track *canonical_track =
+		const disc_track *canonical_track =
 			find_track(m_disc, discpos);
 
 	if (!canonical_track)
-		return false;
+	{
+		const disc_session *canonical_session = nullptr;
+
+		for (const disc_session &session : m_disc.sessions)
+		{
+			if (!session.lead_out.has_value())
+				continue;
+
+			const region &lead_out = *session.lead_out;
+
+			if (discpos.frame < lead_out.start.frame)
+				continue;
+
+			if (lead_out.frames.has_value()
+					&& int64_t(discpos.frame)
+						>= int64_t(lead_out.start.frame)
+							+ int64_t(*lead_out.frames))
+			{
+				continue;
+			}
+
+			canonical_session = &session;
+			break;
+		}
+
+		if (!canonical_session || m_disc.tracks.empty())
+			return false;
+
+		const auto last_track = std::find_if(
+				m_disc.tracks.begin(),
+				m_disc.tracks.end(),
+				[canonical_session](const disc_track &track)
+				{
+					return track.session == canonical_session->number
+							&& track.number == canonical_session->last_track;
+				});
+
+		if (last_track == m_disc.tracks.end())
+			return false;
+
+		const disc_track &first_track = m_disc.tracks.front();
+
+		const auto first_index01 = std::find_if(
+				first_track.indexes.begin(),
+				first_track.indexes.end(),
+				[](const index &entry)
+				{
+					return entry.number == 1;
+				});
+
+		if (first_index01 == first_track.indexes.end())
+			return false;
+
+		const int64_t absolute_frame =
+				int64_t(discpos.frame)
+					+ 150
+					- int64_t(first_index01->start.frame);
+
+		return make_subcode_q_lead_out(
+				*last_track,
+				*canonical_session->lead_out,
+				discpos,
+				absolute_frame,
+				buffer);
+	}
 
 	const region *const canonical_region =
 			find_region(*canonical_track, discpos);
