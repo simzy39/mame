@@ -85,39 +85,6 @@ uint32_t cdrom_file::physical_to_chd_lba(uint32_t physlba, uint32_t &tracknum) c
 	return physlba;
 }
 
-/*-------------------------------------------------
-    logical_to_chd_lba - find the CHD LBA
-    and the track number
--------------------------------------------------*/
-
-/**
- * @fn  uint32_t logical_to_chd_lba(uint32_t loglba, uint32_t &tracknum)
- *
- * @brief   Logical to chd lba.
- *
- * @param   loglba              The loglba.
- * @param [in,out]  tracknum    The tracknum.
- *
- * @return  An uint32_t.
- */
-
-uint32_t cdrom_file::logical_to_chd_lba(uint32_t loglba, uint32_t &tracknum) const
-{
-	// loop until our current LBA is less than the start LBA of the next track
-	for (int track = 0; track < cdtoc.numtrks; track++)
-	{
-		if (loglba < cdtoc.tracks[track + 1].logframeofs)
-		{
-			// convert to physical and proceed
-			uint32_t physlba = cdtoc.tracks[track].physframeofs + (loglba - cdtoc.tracks[track].logframeofs);
-			uint32_t chdlba = physlba - cdtoc.tracks[track].physframeofs + cdtoc.tracks[track].chdframeofs;
-			tracknum = track;
-			return chdlba;
-		}
-	}
-
-	return loglba;
-}
 
 
 /***************************************************************************
