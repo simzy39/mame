@@ -1370,12 +1370,10 @@ bool cdrom_file::get_subcode_raw(uint32_t lbasector, uint8_t *buffer, bool phys)
 
 uint32_t cdrom_file::get_track(uint32_t frame) const
 {
-	uint32_t track = 0;
+	const disc_track *const track =
+			find_track(m_disc, disc_position{ int32_t(frame) });
 
-	/* convert to a CHD sector offset and get track information */
-	logical_to_chd_lba(frame, track);
-
-	return track;
+	return track ? track->number - 1 : 0;
 }
 
 uint32_t cdrom_file::get_track_index(const track_info &track, uint32_t frame)
