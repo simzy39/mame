@@ -520,7 +520,9 @@ private:
 	/** @brief  The fhandle[ CD maximum tracks]. */
 	util::random_read::ptr fhandle[MAX_TRACKS];/* file handle */
 
-	inline uint32_t physical_to_chd_lba(uint32_t physlba, uint32_t &tracknum) const;
+	inline uint32_t physical_to_chd_lba(
+		uint32_t physlba,
+		uint32_t tracknum) const;
 	static uint16_t subcode_q_crc(const uint8_t *data);
 
 	static void reset_toc(toc &toc);
