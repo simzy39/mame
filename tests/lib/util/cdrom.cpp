@@ -495,6 +495,38 @@ TEST_CASE("CD-ROM region supports multiple backing spans", "[util][cdrom]")
 	REQUIRE(disc_sector.has_value());
 	REQUIRE(disc_sector->frame == 600);
 
+		auto disc_position =
+			cdrom_file::disc_position_from_sector_position(
+					lookup_disc, { 500 });
+	REQUIRE(disc_position.has_value());
+	REQUIRE(disc_position->frame == 1000);
+
+	disc_position =
+			cdrom_file::disc_position_from_sector_position(
+					lookup_disc, { 599 });
+	REQUIRE(disc_position.has_value());
+	REQUIRE(disc_position->frame == 1099);
+
+	disc_position =
+			cdrom_file::disc_position_from_sector_position(
+					lookup_disc, { 600 });
+	REQUIRE(disc_position.has_value());
+	REQUIRE(disc_position->frame == 1100);
+
+	disc_position =
+			cdrom_file::disc_position_from_sector_position(
+					lookup_disc, { 699 });
+	REQUIRE(disc_position.has_value());
+	REQUIRE(disc_position->frame == 1199);
+
+	REQUIRE_FALSE(
+			cdrom_file::disc_position_from_sector_position(
+					lookup_disc, { 499 }).has_value());
+
+	REQUIRE_FALSE(
+			cdrom_file::disc_position_from_sector_position(
+					lookup_disc, { 700 }).has_value());
+	
 	REQUIRE_FALSE(
 			cdrom_file::backing_channel_position(
 					lookup_disc, { 1000 }).has_value());
