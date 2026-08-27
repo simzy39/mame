@@ -153,7 +153,9 @@ cdrom_file::cdrom_file(std::string_view inputfile)
 		track.physframeofs = physofs;
 		track.chdframeofs = 0;
 		track.logframeofs += logofs;
-		track.logframes = track.frames - track.pregap;
+		track.logframes =
+		        track.frames
+		                - (track.pgdatasize ? track.pregap : 0);
 
 		// postgap adds to the track length
 		logofs += track.postgap;
@@ -1809,8 +1811,11 @@ cdrom_file::disc cdrom_file::build_disc() const
 			track.regions.push_back(pregap);
 		}
 
+		const uint32_t stored_pregap_frames =
+		        source.pgdatasize ? source.pregap : 0;
+		
 		const uint32_t program_frames =
-				source.frames - source.pregap;
+		        source.frames - stored_pregap_frames;
 
 		region program;
 		program.kind = region_kind::program;
