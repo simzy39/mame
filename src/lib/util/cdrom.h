@@ -140,13 +140,13 @@ public:
                 required = 0x0001
         };
 
-        enum class cdm1_region_owner : uint8_t
+                enum class cdm1_region_owner : uint16_t
         {
                 session = 1,
                 track = 2
         };
 
-        enum class cdm1_region_kind : uint8_t
+        enum class cdm1_region_kind : uint16_t
         {
                 lead_in = 1,
                 pregap = 2,
@@ -155,10 +155,22 @@ public:
                 lead_out = 5
         };
 
-        enum class cdm1_length_state : uint8_t
+        enum class cdm1_region_flag : uint16_t
+        {
+                length_known = 0x0001
+        };
+
+        enum class cdm1_track_type : uint16_t
         {
                 unknown = 0,
-                known = 1
+                mode1 = 1,
+                mode1_raw = 2,
+                mode2 = 3,
+                mode2_form1 = 4,
+                mode2_form2 = 5,
+                mode2_form_mix = 6,
+                mode2_raw = 7,
+                audio = 8
         };
 
         enum class cdm1_evidence_class : uint16_t
@@ -172,12 +184,17 @@ public:
                 chdv5_unit_slice = 1
         };
 
+        enum class cdm1_coordinate_class : uint16_t
+        {
+                decoded_frame = 1
+        };
+
         enum class cdm1_mapping_class : uint16_t
         {
                 linear_interval = 1
         };
 
-        enum class cdm1_provenance : uint8_t
+        enum class cdm1_provenance : uint16_t
         {
                 unknown = 0,
                 captured = 1,
@@ -185,12 +202,26 @@ public:
                 generated = 3
         };
 
-        enum class cdm1_semantic_source : uint8_t
+        enum class cdm1_semantic_source : uint16_t
         {
                 unknown = 0,
                 explicit_fallback = 1,
                 derived_capture = 2
         };
+
+        static constexpr uint32_t CDM1_MAGIC = 0x43444d31; // CDM1
+
+        static constexpr uint32_t CDM1_HEADER_BYTES = 40;
+        static constexpr uint32_t CDM1_SECTION_ENTRY_BYTES = 24;
+        static constexpr uint32_t CDM1_TABLE_HEADER_BYTES = 16;
+
+        static constexpr uint32_t CDM1_DISC_RECORD_BYTES = 32;
+        static constexpr uint32_t CDM1_SESSION_RECORD_BYTES = 32;
+        static constexpr uint32_t CDM1_TRACK_RECORD_BYTES = 24;
+        static constexpr uint32_t CDM1_INDEX_RECORD_BYTES = 24;
+        static constexpr uint32_t CDM1_REGION_RECORD_BYTES = 40;
+        static constexpr uint32_t CDM1_EVIDENCE_RECORD_BYTES = 48;
+        static constexpr uint32_t CDM1_MAPPING_RECORD_BYTES = 48;
 
 	enum class region_kind
 	{
