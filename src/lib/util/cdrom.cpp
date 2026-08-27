@@ -761,6 +761,47 @@ bool cdrom_file::decode_subcode_q(const uint8_t *q, q_position &position)
 	return true;
 }
 
+bool cdrom_file::decode_subcode_q_catalog(
+		const uint8_t *q,
+		q_catalog &catalog)
+{
+	if (classify_subcode_q(q) != q_type::catalog)
+		return false;
+
+	char digits[13];
+
+	for (int digit = 0; digit < 13; digit++)
+	{
+		const uint8_t nibble =
+				(digit & 1)
+					? (q[1 + (digit >> 1)] & 0x0f)
+					: (q[1 + (digit >> 1)] >> 4);
+
+		if (nibble > 9)
+			return false;
+
+		digits[digit] = char('0' + nibble);
+	}
+
+	// Mode-2 Q reserves twelve zero bits following the 13-digit MCN.
+	if ((q[7] & 0x0f) != 0 || q[8] != 0)
+		return false;
+
+	uint8_t absolute_frame;
+
+	if (!from_bcd(q[9], absolute_frame) || absolute_frame >= 75)
+		return false;
+
+	catalog.adr_control =
+			((q[0] & 0x0f) << 4)
+				| ((q[0] & 0xf0) >> 4);
+
+	std::copy(std::begin(digits), std::end(digits), catalog.number.begin());
+	catalog.absolute_frame = absolute_frame;
+
+	return true;
+}
+
 bool cdrom_file::decode_subcode_q_toc(const uint8_t *q, q_toc &toc)
 {
 	if (classify_subcode_q(q) != q_type::lead_in_toc)
