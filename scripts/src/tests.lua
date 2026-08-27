@@ -39,10 +39,14 @@ project("mametests")
 	configuration { }
 
 	links {
-		"utils",
-		ext_lib("expat"),
-		ext_lib("zlib"),
-		"ocore_" .. _OPTIONS["osd"],
+	"utils",
+	ext_lib("expat"),
+	"7z",
+	ext_lib("zlib"),
+	ext_lib("flac"),
+	ext_lib("zstd"),
+	ext_lib("utf8proc"),
+	"ocore_" .. _OPTIONS["osd"],
 	}
 
 	includedirs {
@@ -55,15 +59,10 @@ project("mametests")
 	}
 
 	files {
-		MAME_DIR .. "src/emu/video/rgbsse.cpp",
-		MAME_DIR .. "src/emu/video/rgbsse.h",
-		MAME_DIR .. "src/emu/video/rgbvmx.cpp",
-		MAME_DIR .. "src/emu/video/rgbvmx.h",
-	}
-
-	files {
 		MAME_DIR .. "tests/main.cpp",
 		MAME_DIR .. "tests/lib/util/corestr.cpp",
+		MAME_DIR .. "tests/lib/util/cdrom.cpp",
+		MAME_DIR .. "tests/lib/util/chd.cpp",
 		MAME_DIR .. "tests/lib/util/options.cpp",
 		MAME_DIR .. "tests/emu/attotime.cpp",
 		MAME_DIR .. "tests/emu/video/rgbutil.cpp",

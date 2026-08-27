@@ -24,6 +24,7 @@
 #include "path.h"
 #include "strformat.h"
 
+#include <array>
 #include <cassert>
 #include <cstdlib>
 #include <cstring>
@@ -55,68 +56,32 @@
 ***************************************************************************/
 
 /*-------------------------------------------------
-    physical_to_chd_lba - find the CHD LBA
-    and the track number
+    physical_to_chd_lba - translate a physical
+	track position to its CHD LBA
 -------------------------------------------------*/
 
 /**
- * @fn  static inline uint32_t physical_to_chd_lba(uint32_t physlba, uint32_t &tracknum)
+ * @fn  static inline uint32_t physical_to_chd_lba(uint32_t physlba, uint32_t tracknum)
  *
  * @brief   Physical to chd lba.
  *
  * @param   physlba             The physlba.
- * @param [in,out]  tracknum    The tracknum.
+ * @param   tracknum            The track number.
  *
  * @return  An uint32_t.
  */
 
-uint32_t cdrom_file::physical_to_chd_lba(uint32_t physlba, uint32_t &tracknum) const
+uint32_t cdrom_file::physical_to_chd_lba(
+		uint32_t physlba,
+		uint32_t tracknum) const
 {
-	// loop until our current LBA is less than the start LBA of the next track
-	for (int track = 0; track < cdtoc.numtrks; track++)
-		if (physlba < cdtoc.tracks[track + 1].physframeofs)
-		{
-			uint32_t chdlba = physlba - cdtoc.tracks[track].physframeofs + cdtoc.tracks[track].chdframeofs;
-			tracknum = track;
-			return chdlba;
-		}
+	const track_info &track = cdtoc.tracks[tracknum];
 
-	return physlba;
+	return physlba
+			- track.physframeofs
+			+ track.chdframeofs;
 }
 
-/*-------------------------------------------------
-    logical_to_chd_lba - find the CHD LBA
-    and the track number
--------------------------------------------------*/
-
-/**
- * @fn  uint32_t logical_to_chd_lba(uint32_t loglba, uint32_t &tracknum)
- *
- * @brief   Logical to chd lba.
- *
- * @param   loglba              The loglba.
- * @param [in,out]  tracknum    The tracknum.
- *
- * @return  An uint32_t.
- */
-
-uint32_t cdrom_file::logical_to_chd_lba(uint32_t loglba, uint32_t &tracknum) const
-{
-	// loop until our current LBA is less than the start LBA of the next track
-	for (int track = 0; track < cdtoc.numtrks; track++)
-	{
-		if (loglba < cdtoc.tracks[track + 1].logframeofs)
-		{
-			// convert to physical and proceed
-			uint32_t physlba = cdtoc.tracks[track].physframeofs + (loglba - cdtoc.tracks[track].logframeofs);
-			uint32_t chdlba = physlba - cdtoc.tracks[track].physframeofs + cdtoc.tracks[track].chdframeofs;
-			tracknum = track;
-			return chdlba;
-		}
-	}
-
-	return loglba;
-}
 
 
 /***************************************************************************
@@ -228,6 +193,8 @@ cdrom_file::cdrom_file(std::string_view inputfile)
 	track.logframeofs = logofs;
 	track.chdframeofs = 0;
 	track.logframes = 0;
+
+	m_disc = build_disc();
 }
 
 /*-------------------------------------------------
@@ -324,14 +291,17 @@ cdrom_file::cdrom_file(chd_file *_chd)
 		}
 	}
 
-	// fill out dummy entries for the last track to help our search
-	track_info &track = cdtoc.tracks[cdtoc.numtrks];
-	track.physframeofs = physofs;
-	track.logframeofs = logofs;
-	track.chdframeofs = chdofs;
-	track.logframes = 0;
-}
+		// fill out dummy entries for the last track to help our search
+		track_info &track = cdtoc.tracks[cdtoc.numtrks];
+		track.physframeofs = physofs;
+		track.logframeofs = logofs;
+		track.chdframeofs = chdofs;
+		track.logframes = 0;
 
+		m_disc = build_disc();
+		reconstruct_track_indexes();
+		m_disc = build_disc();
+		}
 
 /*-------------------------------------------------
     destructor - "close" a CD-ROM file
@@ -355,47 +325,27 @@ cdrom_file::~cdrom_file()
 ***************************************************************************/
 
 /**
- * @fn  std::error_condition read_partial_sector(void *dest, uint32_t lbasector, uint32_t chdsector, uint32_t tracknum, uint32_t startoffs, uint32_t length, bool phys)
+ * @fn  std::error_condition read_partial_sector(void *dest, uint32_t chdsector, uint32_t tracknum, uint32_t startoffs, uint32_t length)
  *
  * @brief   Reads partial sector.
  *
  * @param [in,out]  dest    If non-null, destination for the.
- * @param   lbasector       The lbasector.
  * @param   chdsector       The chdsector.
  * @param   tracknum        The tracknum.
  * @param   startoffs       The startoffs.
  * @param   length          The length.
- * @param   phys            true to physical.
  *
  * @return  The partial sector.
  */
 
-std::error_condition cdrom_file::read_partial_sector(void *dest, uint32_t lbasector, uint32_t chdsector, uint32_t tracknum, uint32_t startoffs, uint32_t length, bool phys)
+std::error_condition cdrom_file::read_partial_sector(void *dest, uint32_t chdsector, uint32_t tracknum, uint32_t startoffs, uint32_t length)
 {
 	std::error_condition result;
 	bool needswap = false;
 
-	// if this is pregap info that isn't actually in the file, just return blank data
-	if (!phys)
-	{
-		if ((cdtoc.tracks[tracknum].pgdatasize == 0) && (lbasector < cdtoc.tracks[tracknum].logframeofs))
-		{
-			if (EXTRA_VERBOSE)
-				osd_printf_verbose("PG missing sector: LBA %d, trklog %d\n", lbasector, cdtoc.tracks[tracknum].logframeofs);
-			memset(dest, 0, length);
-			return result;
-		}
-	}
-
 	// if a CHD, just read
 	if (chd != nullptr)
 	{
-		if (!phys && cdtoc.tracks[tracknum].pgdatasize != 0)
-		{
-			// chdman (phys=true) relies on chdframeofs to point to index 0 instead of index 1 for extractcd.
-			// Actually playing CDs requires it to point to index 1 instead of index 0, so adjust the offset when phys=false.
-			chdsector += cdtoc.tracks[tracknum].pregap;
-		}
 
 		result = chd->read_bytes(uint64_t(chdsector) * uint64_t(FRAME_SIZE) + startoffs, dest, length);
 
@@ -411,9 +361,6 @@ std::error_condition cdrom_file::read_partial_sector(void *dest, uint32_t lbasec
 		int bytespersector = cdtoc.tracks[tracknum].datasize + cdtoc.tracks[tracknum].subsize;
 		uint64_t sourcefileoffset = cdtrack_info.track[tracknum].offset;
 
-		if (cdtoc.tracks[tracknum].pgdatasize != 0)
-			chdsector += cdtoc.tracks[tracknum].pregap;
-
 		sourcefileoffset += chdsector * bytespersector + startoffs;
 
 		if (EXTRA_VERBOSE)
@@ -422,13 +369,16 @@ std::error_condition cdrom_file::read_partial_sector(void *dest, uint32_t lbasec
 		result = srcfile.seek(sourcefileoffset, SEEK_SET);
 		size_t actual;
 		if (!result)
+		{
 			std::tie(result, actual) = read(srcfile, dest, length);
-		// FIXME: if (!result && (actual < length)) report error
+			if (!result && (actual != length))
+				result = std::errc::io_error;
+		}
 
 		needswap = cdtrack_info.track[tracknum].swap;
 	}
 
-	if (needswap)
+	if (!result && needswap)
 	{
 		uint8_t *buffer = (uint8_t *)dest - startoffs;
 		for (int swapindex = startoffs; swapindex < 2352; swapindex += 2)
@@ -461,18 +411,41 @@ std::error_condition cdrom_file::read_partial_sector(void *dest, uint32_t lbasec
 
 bool cdrom_file::read_data(uint32_t lbasector, void *buffer, uint32_t datatype, bool phys)
 {
-	// compute CHD sector and tracknumber
-	uint32_t tracknum = 0;
-	uint32_t chdsector;
+	disc_position position;
 
 	if (phys)
 	{
-		chdsector = physical_to_chd_lba(lbasector, tracknum);
+		const std::optional<disc_position> canonical_position =
+				disc_position_from_sector_position(
+						m_disc,
+						sector_position{ int64_t(lbasector) });
+
+		if (!canonical_position.has_value())
+			return false;
+
+		position = *canonical_position;
 	}
 	else
 	{
-		chdsector = logical_to_chd_lba(lbasector, tracknum);
+		position = disc_position{ int32_t(lbasector) };
 	}
+
+	const disc_track *const canonical_track =
+			find_track(m_disc, position);
+	const std::optional<sector_position> backing =
+			backing_sector_position(m_disc, position);
+
+	if (!canonical_track || !backing)
+		return false;
+
+	if (backing->frame < 0)
+		return false;
+
+	uint32_t tracknum = canonical_track->number - 1;
+	const uint32_t chdsector =
+			physical_to_chd_lba(
+					uint32_t(backing->frame),
+					tracknum);
 
 	// copy out the requested sector
 	uint32_t tracktype = cdtoc.tracks[tracknum].trktype;
@@ -480,14 +453,14 @@ bool cdrom_file::read_data(uint32_t lbasector, void *buffer, uint32_t datatype, 
 	if ((datatype == tracktype) || (datatype == CD_TRACK_RAW_DONTCARE))
 	{
 		assert(cdtoc.tracks[tracknum].datasize != 0);
-		return !read_partial_sector(buffer, lbasector, chdsector, tracknum, 0, cdtoc.tracks[tracknum].datasize, phys);
+		return !read_partial_sector(buffer, chdsector, tracknum, 0, cdtoc.tracks[tracknum].datasize);
 	}
 	else
 	{
 		// return 2048 bytes of mode 1 data from a 2352 byte mode 1 raw sector
 		if ((datatype == CD_TRACK_MODE1) && (tracktype == CD_TRACK_MODE1_RAW))
 		{
-			return !read_partial_sector(buffer, lbasector, chdsector, tracknum, 16, 2048, phys);
+			return !read_partial_sector(buffer, chdsector, tracknum, 16, 2048);
 		}
 
 		// return 2352 byte mode 1 raw sector from 2048 bytes of mode 1 data
@@ -501,25 +474,25 @@ bool cdrom_file::read_data(uint32_t lbasector, void *buffer, uint32_t datatype, 
 			put_u24be(&bufptr[12], msf);
 			bufptr[15] = 1; // mode 1
 			LOG(("CDROM: promotion of mode1/form1 sector to mode1 raw is not complete!\n"));
-			return !read_partial_sector(bufptr+16, lbasector, chdsector, tracknum, 0, 2048, phys);
+			return !read_partial_sector(bufptr+16, chdsector, tracknum, 0, 2048);
 		}
 
 		// return 2048 bytes of mode 1 data from a mode2 form1 or raw sector
 		if ((datatype == CD_TRACK_MODE1) && ((tracktype == CD_TRACK_MODE2_FORM1)||(tracktype == CD_TRACK_MODE2_RAW)))
 		{
-			return !read_partial_sector(buffer, lbasector, chdsector, tracknum, 24, 2048, phys);
+			return !read_partial_sector(buffer, chdsector, tracknum, 24, 2048);
 		}
 
 		// return 2048 bytes of mode 1 data from a mode2 form2 or XA sector
 		if ((datatype == CD_TRACK_MODE1) && (tracktype == CD_TRACK_MODE2_FORM_MIX))
 		{
-			return !read_partial_sector(buffer, lbasector, chdsector, tracknum, 8, 2048, phys);
+			return !read_partial_sector(buffer, chdsector, tracknum, 8, 2048);
 		}
 
 		// return mode 2 2336 byte data from a 2352 byte mode 1 or 2 raw sector (skip the header)
 		if ((datatype == CD_TRACK_MODE2) && ((tracktype == CD_TRACK_MODE1_RAW) || (tracktype == CD_TRACK_MODE2_RAW)))
 		{
-			return !read_partial_sector(buffer, lbasector, chdsector, tracknum, 16, 2336, phys);
+			return !read_partial_sector(buffer, chdsector, tracknum, 16, 2336);
 		}
 
 		LOG(("CDROM: Conversion from type %d to type %d not supported!\n", tracktype, datatype));
@@ -547,28 +520,857 @@ bool cdrom_file::read_data(uint32_t lbasector, void *buffer, uint32_t datatype, 
 
 bool cdrom_file::read_subcode(uint32_t lbasector, void *buffer, bool phys)
 {
-	// compute CHD sector and tracknumber
-	uint32_t tracknum = 0;
-	uint32_t chdsector;
+	disc_position position;
 
 	if (phys)
 	{
-		chdsector = physical_to_chd_lba(lbasector, tracknum);
+		const std::optional<disc_position> canonical_position =
+				disc_position_from_sector_position(
+						m_disc,
+						sector_position{ int64_t(lbasector) });
+
+		if (!canonical_position.has_value())
+			return false;
+
+		position = *canonical_position;
 	}
 	else
 	{
-		chdsector = logical_to_chd_lba(lbasector, tracknum);
+		position = disc_position{ int32_t(lbasector) };
 	}
+
+	const disc_track *const canonical_track =
+			find_track(m_disc, position);
+	const std::optional<subcode_position> backing =
+			backing_subcode_position(m_disc, position);
+
+	if (!canonical_track || !backing)
+		return false;
+
+	if (backing->frame < 0)
+		return false;
+
+	uint32_t tracknum = canonical_track->number - 1;
+	const uint32_t chdsector =
+			physical_to_chd_lba(
+					uint32_t(backing->frame),
+					tracknum);
 
 	if (cdtoc.tracks[tracknum].subsize == 0)
 		return false;
 
-	// read the data
-	std::error_condition err = read_partial_sector(buffer, lbasector, chdsector, tracknum, cdtoc.tracks[tracknum].datasize, cdtoc.tracks[tracknum].subsize, phys);
+	// Source images store subcode immediately after the track data, while
+	// CHD CD frames always reserve the first 2352 bytes for sector data
+	// and the final 96 bytes for subcode.
+	const uint32_t subcode_offset =
+			chd
+				? MAX_SECTOR_DATA
+				: cdtoc.tracks[tracknum].datasize;
+
+	std::error_condition err = read_partial_sector(
+		buffer,
+		chdsector,
+		tracknum,
+		subcode_offset,
+		cdtoc.tracks[tracknum].subsize);
 	return !err;
 }
 
+static uint8_t to_bcd(uint32_t value)
+{
+	return ((value / 10) << 4) | (value % 10);
+}
 
+static bool from_bcd(uint8_t value, uint8_t &result)
+{
+	const uint8_t tens = value >> 4;
+	const uint8_t ones = value & 0x0f;
+
+	if (tens > 9 || ones > 9)
+		return false;
+
+	result = tens * 10 + ones;
+	return true;
+}
+
+void cdrom_file::unpack_subcode_q(const uint8_t *subcode, uint8_t *q)
+{
+	for (int byte = 0; byte < 12; byte++)
+	{
+		uint8_t value = 0;
+
+		for (int bit = 0; bit < 8; bit++)
+		{
+			value <<= 1;
+
+			if (subcode[(byte * 8) + bit] & 0x40)
+				value |= 1;
+		}
+
+		q[byte] = value;
+	}
+}
+
+
+void cdrom_file::pack_subcode_q(const uint8_t *q, uint8_t *subcode)
+{
+	memset(subcode, 0, 96);
+
+	for (int byte = 0; byte < 12; byte++)
+	{
+		for (int bit = 0; bit < 8; bit++)
+		{
+			if (q[byte] & (0x80 >> bit))
+				subcode[(byte * 8) + bit] |= 0x40;
+		}
+	}
+}
+
+static uint16_t calculate_q_crc(const uint8_t *data)
+{
+	uint16_t crc = 0;
+
+	for (int byte = 0; byte < 10; byte++)
+	{
+		crc ^= uint16_t(data[byte]) << 8;
+
+		for (int bit = 0; bit < 8; bit++)
+			crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) : (crc << 1);
+	}
+
+	return ~crc;
+}
+
+cdrom_file::q_type cdrom_file::classify_subcode_q(const uint8_t *q)
+{
+	const uint16_t crc = calculate_q_crc(q);
+
+	if (q[10] != (crc >> 8) || q[11] != (crc & 0xff))
+		return q_type::invalid;
+
+	const uint8_t adr = q[0] & 0x0f;
+
+	switch (adr)
+	{
+	case CD_FLAG_ADR_START_TIME:
+		// ADR=1 uses track 00 in the lead-in TOC and AA in the lead-out.
+		if (q[1] == 0x00)
+			return q_type::lead_in_toc;
+
+		if (q[1] == 0xaa)
+			return q_type::lead_out;
+
+		return q_type::position;
+
+	case CD_FLAG_ADR_CATALOG_CODE:
+		return q_type::catalog;
+
+	case CD_FLAG_ADR_ISRC_CODE:
+		return q_type::isrc;
+
+	default:
+		return q_type::unknown;
+	}
+}
+
+void cdrom_file::encode_subcode_q(const q_position &position, uint8_t *q)
+{
+	const uint32_t relmsf = cdrom_file::lba_to_msf(position.relative_frame);
+	const uint32_t absmsf = cdrom_file::lba_to_msf(position.absolute_frame);
+
+	// MAME stores ADR in the high nibble and CONTROL in the low nibble.
+	// Q stores CONTROL in the high nibble and ADR in the low nibble.
+	q[0] = ((position.adr_control & 0x0f) << 4) | ((position.adr_control & 0xf0) >> 4);
+	q[1] = to_bcd(position.track);
+	q[2] = to_bcd(position.index);
+
+	q[3] = (relmsf >> 16) & 0xff;
+	q[4] = (relmsf >> 8) & 0xff;
+	q[5] = relmsf & 0xff;
+
+	q[6] = 0;
+
+	q[7] = (absmsf >> 16) & 0xff;
+	q[8] = (absmsf >> 8) & 0xff;
+	q[9] = absmsf & 0xff;
+
+	const uint16_t crc = calculate_q_crc(q);
+	q[10] = crc >> 8;
+	q[11] = crc;
+}
+
+bool cdrom_file::decode_subcode_q(const uint8_t *q, q_position &position)
+{
+	if (classify_subcode_q(q) != q_type::position)
+		return false;
+
+	// ADR=1 position Q reserves this byte as zero.
+	if (q[6] != 0)
+		return false;
+
+	uint8_t track;
+	uint8_t index;
+	uint8_t rel_minute;
+	uint8_t rel_second;
+	uint8_t rel_frame;
+	uint8_t abs_minute;
+	uint8_t abs_second;
+	uint8_t abs_frame;
+
+	if (!from_bcd(q[1], track)
+			|| !from_bcd(q[2], index)
+			|| !from_bcd(q[3], rel_minute)
+			|| !from_bcd(q[4], rel_second)
+			|| !from_bcd(q[5], rel_frame)
+			|| !from_bcd(q[7], abs_minute)
+			|| !from_bcd(q[8], abs_second)
+			|| !from_bcd(q[9], abs_frame))
+	{
+		return false;
+	}
+
+	if (track == 0
+			|| track > MAX_TRACKS
+			|| index > MAX_INDEX
+			|| rel_second >= 60
+			|| abs_second >= 60
+			|| rel_frame >= 75
+			|| abs_frame >= 75)
+	{
+		return false;
+	}
+
+	// Convert the Q CONTROL/ADR byte back to MAME's ADR/CONTROL layout.
+	position.adr_control =
+			((q[0] & 0x0f) << 4)
+				| ((q[0] & 0xf0) >> 4);
+
+	position.track = track;
+	position.index = index;
+
+	position.relative_frame =
+			uint32_t(rel_minute) * 60 * 75
+				+ uint32_t(rel_second) * 75
+				+ rel_frame;
+
+	position.absolute_frame =
+			uint32_t(abs_minute) * 60 * 75
+				+ uint32_t(abs_second) * 75
+				+ abs_frame;
+
+	return true;
+}
+
+bool cdrom_file::decode_subcode_q_toc(const uint8_t *q, q_toc &toc)
+{
+	if (classify_subcode_q(q) != q_type::lead_in_toc)
+		return false;
+
+	// ADR=1 lead-in TOC packets use track 00.
+	if (q[1] != 0x00)
+		return false;
+
+	uint8_t minute;
+	uint8_t second;
+	uint8_t frame;
+
+	if (!from_bcd(q[7], minute)
+			|| !from_bcd(q[8], second)
+			|| !from_bcd(q[9], frame))
+	{
+		return false;
+	}
+
+	if (second >= 60 || frame >= 75)
+		return false;
+
+	toc.adr_control =
+			((q[0] & 0x0f) << 4)
+				| ((q[0] & 0xf0) >> 4);
+
+	toc.point = q[2];
+	toc.minute = minute;
+	toc.second = second;
+	toc.frame = frame;
+
+	return true;
+}
+
+bool cdrom_file::interpret_subcode_q_toc(
+		const q_toc &toc,
+		q_toc_semantics &semantics)
+{
+	semantics.adr_control = toc.adr_control;
+	semantics.point = toc.point;
+	semantics.track = std::nullopt;
+	semantics.start_frame = std::nullopt;
+	semantics.disc_type = std::nullopt;
+
+	switch (toc.point)
+	{
+	case 0xa0:
+		if (toc.minute == 0 || toc.minute > MAX_TRACKS || toc.frame != 0)
+			return false;
+
+		semantics.kind = q_toc_kind::first_track;
+		semantics.track = toc.minute;
+		semantics.disc_type = to_bcd(toc.second);
+		return true;
+
+	case 0xa1:
+		if (toc.minute == 0
+				|| toc.minute > MAX_TRACKS
+				|| toc.second != 0
+				|| toc.frame != 0)
+		{
+			return false;
+		}
+
+		semantics.kind = q_toc_kind::last_track;
+		semantics.track = toc.minute;
+		return true;
+
+	case 0xa2:
+		semantics.kind = q_toc_kind::lead_out;
+		semantics.start_frame =
+				uint32_t(toc.minute) * 60 * 75
+					+ uint32_t(toc.second) * 75
+					+ toc.frame;
+		return true;
+
+	default:
+		break;
+	}
+
+	uint8_t track;
+
+	if (from_bcd(toc.point, track)
+			&& track != 0
+			&& track <= MAX_TRACKS)
+	{
+		semantics.kind = q_toc_kind::track;
+		semantics.track = track;
+		semantics.start_frame =
+				uint32_t(toc.minute) * 60 * 75
+					+ uint32_t(toc.second) * 75
+					+ toc.frame;
+		return true;
+	}
+
+	// Other lead-in POINT values exist, particularly for multisession
+	// discs.  Preserve their identity rather than treating them as a
+	// normal track point.
+	semantics.kind = q_toc_kind::special;
+	return true;
+}
+
+bool cdrom_file::q_toc_accumulator::complete() const
+{
+	if (conflict
+			|| !first_track.has_value()
+			|| !last_track.has_value()
+			|| !lead_out_start_frame.has_value()
+			|| *first_track > *last_track)
+	{
+		return false;
+	}
+
+	for (uint16_t track = *first_track; track <= *last_track; track++)
+	{
+		const auto found = std::find_if(
+				tracks.begin(),
+				tracks.end(),
+				[track] (const q_toc_semantics &semantics)
+				{
+					return semantics.track.has_value()
+							&& *semantics.track == track;
+				});
+
+		if (found == tracks.end())
+			return false;
+	}
+
+	return true;
+}
+
+bool cdrom_file::accumulate_subcode_q_toc(
+		const uint8_t *q,
+		q_toc_accumulator &accumulator)
+{
+	q_toc toc;
+
+	if (!decode_subcode_q_toc(q, toc))
+		return false;
+
+	q_toc_semantics semantics;
+
+	if (!interpret_subcode_q_toc(toc, semantics))
+		return false;
+
+	return accumulate_q_toc_semantics(semantics, accumulator);
+}
+
+bool cdrom_file::accumulate_q_toc_semantics(
+		const q_toc_semantics &semantics,
+		q_toc_accumulator &accumulator)
+{
+	if (accumulator.conflict)
+		return false;
+
+	auto merge = [&accumulator] (auto &target, const auto &value)
+	{
+		if (!value.has_value())
+			return false;
+
+		if (target.has_value() && *target != *value)
+		{
+			accumulator.conflict = true;
+			return false;
+		}
+
+		target = value;
+		return true;
+	};
+
+	switch (semantics.kind)
+	{
+	case q_toc_kind::first_track:
+		if (!merge(accumulator.first_track, semantics.track))
+			return false;
+
+		if (semantics.disc_type.has_value()
+				&& !merge(accumulator.disc_type, semantics.disc_type))
+		{
+			return false;
+		}
+
+		return true;
+
+	case q_toc_kind::last_track:
+		return merge(accumulator.last_track, semantics.track);
+
+	case q_toc_kind::lead_out:
+		return merge(accumulator.lead_out_start_frame, semantics.start_frame);
+
+	case q_toc_kind::track:
+		if (!semantics.track.has_value() || !semantics.start_frame.has_value())
+			return false;
+
+		for (const q_toc_semantics &existing : accumulator.tracks)
+		{
+			if (existing.track != semantics.track)
+				continue;
+
+			if (existing.start_frame != semantics.start_frame
+					|| existing.adr_control != semantics.adr_control)
+			{
+				accumulator.conflict = true;
+				return false;
+			}
+
+			return true;
+		}
+
+		accumulator.tracks.push_back(semantics);
+		return true;
+
+	case q_toc_kind::special:
+		return false;
+	}
+
+	return false;
+}
+
+
+bool cdrom_file::apply_q_toc_accumulator(
+		const q_toc_accumulator &accumulator,
+		disc &disc,
+		uint8_t session_number)
+{
+	if (!accumulator.complete())
+		return false;
+
+	cdrom_file::disc updated = disc;
+
+	q_toc_semantics semantics;
+
+	semantics.adr_control = CD_FLAG_ADR_START_TIME << 4;
+	semantics.kind = q_toc_kind::first_track;
+	semantics.point = 0xa0;
+	semantics.track = accumulator.first_track;
+	semantics.start_frame = std::nullopt;
+	semantics.disc_type = accumulator.disc_type;
+
+	if (!apply_q_toc_semantics(semantics, updated, session_number))
+		return false;
+
+	semantics.kind = q_toc_kind::last_track;
+	semantics.point = 0xa1;
+	semantics.track = accumulator.last_track;
+	semantics.disc_type = std::nullopt;
+
+	if (!apply_q_toc_semantics(semantics, updated, session_number))
+		return false;
+
+	semantics.kind = q_toc_kind::lead_out;
+	semantics.point = 0xa2;
+	semantics.track = std::nullopt;
+	semantics.start_frame = accumulator.lead_out_start_frame;
+
+	if (!apply_q_toc_semantics(semantics, updated, session_number))
+		return false;
+
+	for (const q_toc_semantics &track : accumulator.tracks)
+	{
+		if (!apply_q_toc_semantics(track, updated, session_number))
+			return false;
+	}
+
+	disc = std::move(updated);
+	return true;
+}
+
+bool cdrom_file::apply_q_toc_semantics(
+        const q_toc_semantics &semantics,
+        disc &disc,
+        uint8_t session_number)
+{
+    auto session_it = std::find_if(
+            disc.sessions.begin(),
+            disc.sessions.end(),
+            [session_number](const disc_session &session)
+            {
+                return session.number == session_number;
+            });
+
+    if (session_it == disc.sessions.end())
+        return false;
+
+    switch (semantics.kind)
+    {
+    case q_toc_kind::first_track:
+        if (!semantics.track)
+            return false;
+
+        session_it->first_track = *semantics.track;
+        return true;
+
+    case q_toc_kind::last_track:
+        if (!semantics.track)
+            return false;
+
+        session_it->last_track = *semantics.track;
+        return true;
+
+    case q_toc_kind::lead_out:
+    if (!semantics.start_frame)
+        return false;
+
+    if (!session_it->lead_out)
+    {
+        region lead_out;
+        lead_out.kind = region_kind::lead_out;
+        lead_out.start =
+				disc_position{ int32_t(*semantics.start_frame) };
+        lead_out.frames = std::nullopt;
+        lead_out.main_data = region_presence::unknown;
+        lead_out.subcode = region_presence::unknown;
+
+        session_it->lead_out = lead_out;
+    }
+    else
+    {
+        session_it->lead_out->start =
+				disc_position{ int32_t(*semantics.start_frame) };
+    }
+
+    return true;
+
+    case q_toc_kind::track:
+        if (!semantics.track || !semantics.start_frame)
+            return false;
+
+        {
+            auto track_it = std::find_if(
+                    disc.tracks.begin(),
+                    disc.tracks.end(),
+                    [&semantics, session_number](const disc_track &track)
+                    {
+                        return track.session == session_number
+                                && track.number == *semantics.track;
+                    });
+
+            if (track_it == disc.tracks.end())
+                return false;
+
+            auto index_it = std::find_if(
+                    track_it->indexes.begin(),
+                    track_it->indexes.end(),
+                    [](const index &entry)
+                    {
+                        return entry.number == 1;
+                    });
+
+                        const disc_position start{
+								int32_t(*semantics.start_frame) };
+
+            if (index_it == track_it->indexes.end())
+            {
+                track_it->indexes.push_back(
+						{ 1, start });
+            }
+            else
+            {
+                index_it->start = start;
+            }
+
+            auto program_it = std::find_if(
+                    track_it->regions.begin(),
+                    track_it->regions.end(),
+                    [](const region &entry)
+                    {
+                        return entry.kind == region_kind::program;
+                    });
+
+            if (program_it != track_it->regions.end())
+                program_it->start = start;
+
+            if (session_it->first_track == track_it->number)
+                session_it->program_start = start;
+
+            return true;
+        }
+
+    case q_toc_kind::special:
+        return false;
+    }
+
+    return false;
+}
+
+bool cdrom_file::make_subcode_q_position(
+		const disc_track &track,
+		disc_position position,
+		int64_t track_frame,
+		int64_t absolute_frame,
+		q_position &q)
+{
+	if (absolute_frame < 0)
+		return false;
+
+	uint8_t adr_control =
+			(CD_FLAG_ADR_START_TIME << 4)
+				| (track.control_flags & 0x0f);
+
+	if (track.type != CD_TRACK_AUDIO)
+		adr_control |= CD_FLAG_CONTROL_DATA_TRACK;
+
+	q.adr_control = adr_control;
+	q.track = track.number;
+
+	const region *const canonical_region =
+			find_region(track, position);
+
+	if (canonical_region
+			&& canonical_region->kind == region_kind::pregap)
+	{
+		q.index = 0;
+		q.relative_frame = uint32_t(-track_frame);
+	}
+	else
+	{
+		q.relative_frame = uint32_t(track_frame);
+
+		const index *canonical_index = nullptr;
+
+		for (const index &entry : track.indexes)
+		{
+			if (entry.start.frame <= position.frame
+					&& (!canonical_index
+						|| entry.start.frame > canonical_index->start.frame))
+			{
+				canonical_index = &entry;
+			}
+		}
+
+		q.index = canonical_index ? canonical_index->number : 1;
+	}
+
+	q.absolute_frame = uint32_t(absolute_frame);
+
+	return true;
+}
+
+bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) const
+{
+	disc_position discpos;
+
+	if (phys)
+	{
+		const std::optional<disc_position> position =
+				disc_position_from_sector_position(
+						m_disc,
+						sector_position{ int64_t(lbasector) });
+
+		if (!position.has_value())
+			return false;
+
+		discpos = *position;
+	}
+	else
+	{
+		discpos = disc_position{ int32_t(lbasector) };
+	}
+
+	const disc_track *canonical_track =
+			find_track(m_disc, discpos);
+
+	if (!canonical_track)
+		return false;
+
+	const region *const canonical_region =
+			find_region(*canonical_track, discpos);
+
+	const uint32_t tracknum = canonical_track->number - 1;
+	const track_info &track = cdtoc.tracks[tracknum];
+
+	const bool uncaptured_pregap =
+			canonical_region
+				&& canonical_region->kind == region_kind::pregap
+				&& canonical_region->subcode != region_presence::captured;
+
+	// Captured subcode is authoritative.  Return captured Q without
+	// validating or replacing it.
+		if (!uncaptured_pregap && track.subsize == 96)
+	{
+		uint8_t subcode[96];
+
+		if (const_cast<cdrom_file *>(this)->read_subcode(lbasector, subcode, phys))
+		{
+			if (track.subtype == CD_SUB_RAW)
+			{
+				unpack_subcode_q(subcode, buffer);
+				return true;
+			}
+		}
+	}
+
+	// Never synthesize Q over captured subcode that we cannot decode.
+		if (!uncaptured_pregap && track.subsize != 0)
+		return false;
+
+	const auto index01 = std::find_if(
+			canonical_track->indexes.begin(),
+			canonical_track->indexes.end(),
+			[](const index &entry)
+			{
+				return entry.number == 1;
+			});
+
+	if (index01 == canonical_track->indexes.end())
+		return false;
+
+	const int64_t logical_frame = int64_t(discpos.frame);
+	const int64_t track_frame =
+			logical_frame - int64_t(index01->start.frame);
+
+		if (m_disc.tracks.empty())
+		return false;
+
+	const disc_track &first_track = m_disc.tracks.front();
+
+	const auto first_index01 = std::find_if(
+			first_track.indexes.begin(),
+			first_track.indexes.end(),
+			[](const index &entry)
+			{
+				return entry.number == 1;
+			});
+
+	if (first_index01 == first_track.indexes.end())
+		return false;
+
+	// Track 1 INDEX 01 corresponds to absolute 00:02:00.
+	const int64_t absolute_frame =
+			logical_frame + 150 - int64_t(first_index01->start.frame);
+
+	q_position q;
+
+	if (!make_subcode_q_position(
+			*canonical_track,
+			discpos,
+			track_frame,
+			absolute_frame,
+			q))
+	{
+		return false;
+	}
+
+	encode_subcode_q(q, buffer);
+
+	return true;
+}
+
+bool cdrom_file::get_subcode_raw(uint32_t lbasector, uint8_t *buffer, bool phys) const
+{
+	disc_position position;
+
+	if (phys)
+	{
+		const std::optional<disc_position> canonical_position =
+				disc_position_from_sector_position(
+						m_disc,
+						sector_position{ int64_t(lbasector) });
+
+		if (!canonical_position.has_value())
+			return false;
+
+		position = *canonical_position;
+	}
+	else
+	{
+		position = disc_position{ int32_t(lbasector) };
+	}
+
+	const disc_track *const canonical_track =
+			find_track(m_disc, position);
+
+	if (!canonical_track)
+		return false;
+
+	const region *const canonical_region =
+			find_region(*canonical_track, position);
+
+	const uint32_t tracknum = canonical_track->number - 1;
+	const track_info &track = cdtoc.tracks[tracknum];
+
+	const bool uncaptured_pregap =
+			canonical_region
+				&& canonical_region->kind == region_kind::pregap
+				&& canonical_region->subcode != region_presence::captured;
+
+	// Preserve captured raw P-W subcode exactly as stored.
+		if (!uncaptured_pregap && track.subsize == 96)
+	{
+		if (track.subtype == CD_SUB_RAW)
+			return const_cast<cdrom_file *>(this)->read_subcode(lbasector, buffer, phys);
+
+		// Never replace captured subcode in another representation
+		// with synthesized data.
+		return false;
+	}
+
+		if (!uncaptured_pregap && track.subsize != 0)
+		return false;
+
+	uint8_t q[12];
+
+	if (!get_subcode_q(lbasector, q, phys))
+		return false;
+
+	pack_subcode_q(q, buffer);
+	return true;
+}
 
 /***************************************************************************
     HANDY UTILITIES
@@ -591,35 +1393,701 @@ bool cdrom_file::read_subcode(uint32_t lbasector, void *buffer, bool phys)
 
 uint32_t cdrom_file::get_track(uint32_t frame) const
 {
-	uint32_t track = 0;
+	const disc_track *const track =
+			find_track(m_disc, disc_position{ int32_t(frame) });
 
-	/* convert to a CHD sector offset and get track information */
-	logical_to_chd_lba(frame, track);
+	return track ? track->number - 1 : 0;
+}
 
-	return track;
+uint32_t cdrom_file::get_track_start(uint32_t track) const
+{
+	if (track == 0xaa)
+	{
+		if (!m_disc.sessions.empty())
+		{
+			const disc_session &session = m_disc.sessions.back();
+
+			if (session.lead_out.has_value()
+					&& session.lead_out->start.frame >= 0)
+			{
+				return uint32_t(session.lead_out->start.frame);
+			}
+		}
+
+		return cdtoc.tracks[cdtoc.numtrks].logframeofs;
+	}
+
+		if (track >= m_disc.tracks.size())
+		return cdtoc.tracks[track].logframeofs;
+
+	const disc_track &canonical_track = m_disc.tracks[track];
+
+	const auto index01 = std::find_if(
+			canonical_track.indexes.begin(),
+			canonical_track.indexes.end(),
+			[](const index &entry)
+			{
+				return entry.number == 1;
+			});
+
+	assert(index01 != canonical_track.indexes.end());
+	assert(index01->start.frame >= 0);
+
+	return uint32_t(index01->start.frame);
+}
+
+uint16_t cdrom_file::subcode_q_crc(const uint8_t *data)
+{
+	return calculate_q_crc(data);
 }
 
 uint32_t cdrom_file::get_track_index(uint32_t frame) const
 {
-	const uint32_t track = get_track(frame);
-	const uint32_t track_start = get_track_start(track);
-	const uint32_t index_offset = frame - track_start;
-	int index = 0;
+	const disc_position position{ int32_t(frame) };
+	const disc_track *const canonical_track =
+			find_track(m_disc, position);
 
-	for (int i = 0; i < std::size(cdtrack_info.track[track].idx); i++)
+	if (!canonical_track)
+		return 1;
+
+	const region *const canonical_region =
+			find_region(*canonical_track, position);
+
+	if (canonical_region
+			&& canonical_region->kind == region_kind::pregap)
 	{
-		if (index_offset >= cdtrack_info.track[track].idx[i])
-			index = i;
-		else
-			break;
+		return 0;
 	}
 
-	if (cdtrack_info.track[track].idx[index] == -1)
-		index = 1; // valid index not found, default to index 1
+	const uint32_t track = canonical_track->number - 1;
 
-	return index;
+	const track_info &trackinfo = cdtoc.tracks[track];
+
+	// When position Q is stored with the image, it is authoritative for
+	// the index at this sector.  This avoids requiring INDEX 02+ to be
+	// duplicated in CHD metadata.
+	if (trackinfo.subsize == MAX_SUBCODE_DATA
+			&& trackinfo.subtype == CD_SUB_RAW)
+	{
+		uint8_t q[12];
+		q_position position;
+
+		if (get_subcode_q(frame, q)
+				&& decode_subcode_q(q, position)
+				&& position.track == track + 1)
+		{
+			return position.index;
+		}
+	}
+
+		// Descriptor-backed images, and CHDs without usable position Q,
+	// fall back to the canonical semantic index table.
+	const index *canonical_index = nullptr;
+
+	for (const index &entry : canonical_track->indexes)
+	{
+		if (entry.start.frame <= position.frame
+				&& (!canonical_index
+					|| entry.start.frame > canonical_index->start.frame))
+		{
+			canonical_index = &entry;
+		}
+	}
+
+	return canonical_index ? canonical_index->number : 1;
 }
 
+const cdrom_file::disc &cdrom_file::get_disc() const
+{
+	return m_disc;
+}
+
+cdrom_file::disc cdrom_file::build_disc() const
+{
+	disc result;
+
+	result.sessions.reserve(cdtoc.numsessions ? cdtoc.numsessions : 1);
+	result.tracks.reserve(cdtoc.numtrks);
+
+	for (uint32_t tracknum = 0; tracknum < cdtoc.numtrks; tracknum++)
+	{
+		const track_info &source = cdtoc.tracks[tracknum];
+
+		disc_track track;
+		track.number = tracknum + 1;
+		track.session = source.session + 1;
+		track.type = source.trktype;
+		track.control_flags = source.control_flags;
+
+		if (source.pregap)
+		{
+			region pregap;
+			pregap.kind = region_kind::pregap;
+			pregap.start =
+					disc_position{
+							int32_t(source.logframeofs)
+								- int32_t(source.pregap) };
+			pregap.frames = source.pregap;
+			pregap.main_data =
+					source.pgdatasize
+						? region_presence::captured
+						: region_presence::unknown;
+			pregap.subcode =
+					source.pgsubsize
+						? region_presence::captured
+						: region_presence::unknown;
+
+		if (source.pgdatasize || source.pgsubsize)
+		{
+			captured_position captured;
+
+			if (source.pgdatasize)
+				captured.sector_data =
+						sector_position{ int64_t(source.physframeofs) };
+
+			if (source.pgsubsize)
+				captured.subcode =
+						subcode_position{ int64_t(source.physframeofs) };
+
+			pregap.backing.push_back(
+		{
+			pregap.start,
+			pregap.frames,
+			captured
+		});
+		}
+
+			track.regions.push_back(pregap);
+		}
+
+		const uint32_t program_frames =
+				source.frames - source.pregap;
+
+		region program;
+		program.kind = region_kind::program;
+		program.start =
+				disc_position{ int32_t(source.logframeofs) };
+		program.frames = program_frames;
+		program.main_data = region_presence::captured;
+		program.subcode =
+				source.subsize
+					? region_presence::captured
+					: region_presence::unknown;
+
+		captured_position captured;
+
+		const int64_t program_physical_frame =
+				int64_t(source.physframeofs)
+					+ (source.pgdatasize
+							? int64_t(source.pregap)
+							: 0);
+
+		captured.sector_data =
+				sector_position{ program_physical_frame };
+
+		if (source.subsize)
+		{
+			captured.subcode =
+					subcode_position{ program_physical_frame };
+		}
+
+		program.backing.push_back(
+		{
+			program.start,
+			program.frames,
+			captured
+		});
+
+		track.regions.push_back(program);
+
+		if (source.postgap)
+		{
+			region postgap;
+			postgap.kind = region_kind::postgap;
+			postgap.start =
+					disc_position{
+							int32_t(source.logframeofs)
+								+ int32_t(program_frames) };
+			postgap.frames = source.postgap;
+			postgap.main_data = region_presence::unknown;
+			postgap.subcode = region_presence::unknown;
+
+			track.regions.push_back(postgap);
+		}
+
+		track.indexes.push_back(
+				{ 1, disc_position{ int32_t(source.logframeofs) } });
+
+		for (uint32_t indexnum = 2; indexnum <= MAX_INDEX; indexnum++)
+		{
+			if (source.idx[indexnum] >= 0)
+		{
+			track.indexes.push_back(
+				{
+					uint8_t(indexnum),
+					disc_position{
+							int32_t(source.logframeofs)
+								+ source.idx[indexnum] }
+				});
+		}
+		}
+
+		result.tracks.push_back(std::move(track));
+	}
+
+		const uint32_t session_count = cdtoc.numsessions ? cdtoc.numsessions : 1;
+
+	for (uint32_t sessionnum = 0; sessionnum < session_count; sessionnum++)
+	{
+		uint32_t first_track = cdtoc.numtrks;
+		uint32_t last_track = cdtoc.numtrks;
+
+		for (uint32_t tracknum = 0; tracknum < cdtoc.numtrks; tracknum++)
+		{
+			if (cdtoc.tracks[tracknum].session != sessionnum)
+				continue;
+
+			if (first_track == cdtoc.numtrks)
+				first_track = tracknum;
+
+			last_track = tracknum;
+		}
+
+		if (first_track == cdtoc.numtrks)
+			continue;
+
+		disc_session session;
+		session.number = sessionnum + 1;
+		session.first_track = first_track + 1;
+		session.last_track = last_track + 1;
+		session.program_start =
+			disc_position{
+					int32_t(cdtoc.tracks[first_track].logframeofs) };
+		// The legacy TOC does not reliably retain session lead-in
+		// positions or intermediate-session lead-out positions.
+		session.lead_in = std::nullopt;
+		session.lead_out = std::nullopt;
+
+		// The dummy TOC entry retains the logical end of the complete disc,
+		// which is the final session's lead-out start.
+		if (sessionnum + 1 == session_count)
+		{
+			region lead_out;
+			lead_out.kind = region_kind::lead_out;
+			lead_out.start =
+					disc_position{
+							int32_t(cdtoc.tracks[cdtoc.numtrks].logframeofs) };
+			lead_out.frames = std::nullopt;
+			lead_out.main_data = region_presence::unknown;
+			lead_out.subcode = region_presence::unknown;
+
+			session.lead_out = lead_out;
+		}
+
+		result.sessions.push_back(std::move(session));
+	}
+
+	return result;
+}
+
+const cdrom_file::disc_track *cdrom_file::find_track(
+		const disc &disc,
+		disc_position position)
+{
+	for (const disc_track &track : disc.tracks)
+	{
+		if (find_region(track, position))
+			return &track;
+	}
+
+	return nullptr;
+}
+
+std::optional<cdrom_file::sector_position> cdrom_file::backing_sector_position(
+		const disc &disc,
+		disc_position position)
+{
+	const disc_track *const track = find_track(disc, position);
+	if (!track)
+		return std::nullopt;
+
+	return backing_sector_position(*track, position);
+}
+
+std::optional<cdrom_file::disc_position> cdrom_file::disc_position_from_sector_position(
+		const disc &disc,
+		sector_position position)
+{
+	for (const disc_track &track : disc.tracks)
+	{
+		for (const region &region : track.regions)
+		{
+			for (const backing_span &span : region.backing)
+			{
+				if (!span.captured.sector_data.has_value())
+					continue;
+
+				const int64_t captured_start =
+						span.captured.sector_data->frame;
+
+				if (position.frame < captured_start)
+					continue;
+
+				const int64_t offset =
+						position.frame - captured_start;
+
+				if (span.frames.has_value()
+						&& offset >= int64_t(*span.frames))
+				{
+					continue;
+				}
+
+				return disc_position{
+						int32_t(int64_t(span.start.frame) + offset)
+				};
+			}
+		}
+	}
+
+	return std::nullopt;
+}
+
+std::optional<cdrom_file::channel_position> cdrom_file::backing_channel_position(
+		const disc &disc,
+		disc_position position)
+{
+	const disc_track *const track = find_track(disc, position);
+	if (!track)
+		return std::nullopt;
+
+	return backing_channel_position(*track, position);
+}
+
+std::optional<cdrom_file::subcode_position> cdrom_file::backing_subcode_position(
+		const disc &disc,
+		disc_position position)
+{
+	const disc_track *const track = find_track(disc, position);
+	if (!track)
+		return std::nullopt;
+
+	return backing_subcode_position(*track, position);
+}
+
+const cdrom_file::region *cdrom_file::find_region(
+		const disc_track &track,
+		disc_position position)
+{
+	for (const region &region : track.regions)
+	{
+		if (position.frame < region.start.frame)
+			continue;
+
+		if (!region.frames.has_value())
+			return &region;
+
+		const int64_t end =
+				int64_t(region.start.frame)
+					+ int64_t(*region.frames);
+
+		if (int64_t(position.frame) < end)
+			return &region;
+	}
+
+	return nullptr;
+}
+
+std::optional<cdrom_file::sector_position> cdrom_file::backing_sector_position(
+		const disc_track &track,
+		disc_position position)
+{
+	const region *const region = find_region(track, position);
+	if (!region)
+		return std::nullopt;
+
+	return backing_sector_position(*region, position);
+}
+
+std::optional<cdrom_file::channel_position> cdrom_file::backing_channel_position(
+		const disc_track &track,
+		disc_position position)
+{
+	const region *const region = find_region(track, position);
+	if (!region)
+		return std::nullopt;
+
+	return backing_channel_position(*region, position);
+}
+
+std::optional<cdrom_file::subcode_position> cdrom_file::backing_subcode_position(
+		const disc_track &track,
+		disc_position position)
+{
+	const region *const region = find_region(track, position);
+	if (!region)
+		return std::nullopt;
+
+	return backing_subcode_position(*region, position);
+}
+
+const cdrom_file::backing_span *cdrom_file::find_backing_span(
+		const region &region,
+		disc_position position)
+{
+	for (const backing_span &span : region.backing)
+	{
+		if (position.frame < span.start.frame)
+			continue;
+
+		if (!span.frames.has_value())
+			return &span;
+
+		const int64_t end =
+				int64_t(span.start.frame)
+					+ int64_t(*span.frames);
+
+		if (int64_t(position.frame) < end)
+			return &span;
+	}
+
+	return nullptr;
+}
+
+std::optional<cdrom_file::sector_position> cdrom_file::backing_sector_position(
+		const region &region,
+		disc_position position)
+{
+	const backing_span *const span = find_backing_span(region, position);
+	if (!span || !span->captured.sector_data.has_value())
+		return std::nullopt;
+
+	const int64_t offset =
+			int64_t(position.frame) - int64_t(span->start.frame);
+
+	return sector_position{
+			span->captured.sector_data->frame + offset
+	};
+}
+
+std::optional<cdrom_file::channel_position> cdrom_file::backing_channel_position(
+		const region &region,
+		disc_position position)
+{
+	const backing_span *const span = find_backing_span(region, position);
+	if (!span || !span->captured.main_channel.has_value())
+		return std::nullopt;
+
+	const int64_t offset =
+			int64_t(position.frame) - int64_t(span->start.frame);
+
+	return channel_position{
+			span->captured.main_channel->frame + offset,
+			span->captured.main_channel->byte_offset
+	};
+}
+
+std::optional<cdrom_file::subcode_position> cdrom_file::backing_subcode_position(
+		const region &region,
+		disc_position position)
+{
+	const backing_span *const span = find_backing_span(region, position);
+	if (!span || !span->captured.subcode.has_value())
+		return std::nullopt;
+
+	const int64_t offset =
+			int64_t(position.frame) - int64_t(span->start.frame);
+
+	return subcode_position{
+			span->captured.subcode->frame + offset
+	};
+}
+
+bool cdrom_file::validate_backing_spans(const region &region)
+{
+	int64_t previous_end = int64_t(region.start.frame);
+
+	for (std::size_t index = 0; index < region.backing.size(); ++index)
+	{
+		const backing_span &span = region.backing[index];
+		const int64_t start = int64_t(span.start.frame);
+
+		if (start < int64_t(region.start.frame))
+			return false;
+
+		if (start < previous_end)
+			return false;
+
+		if (!span.frames.has_value())
+		{
+			if (index + 1 != region.backing.size())
+				return false;
+
+			if (region.frames.has_value())
+				return false;
+
+			return true;
+		}
+
+		if (*span.frames == 0)
+			return false;
+
+		const int64_t end = start + int64_t(*span.frames);
+
+		if (region.frames.has_value())
+		{
+			const int64_t region_end =
+					int64_t(region.start.frame)
+						+ int64_t(*region.frames);
+
+			if (end > region_end)
+				return false;
+		}
+
+		previous_end = end;
+	}
+
+	return true;
+}
+
+void cdrom_file::reconstruct_track_indexes()
+{
+	if (chd == nullptr)
+		return;
+
+	for (uint32_t tracknum = 0; tracknum < cdtoc.numtrks; tracknum++)
+	{
+		track_info &track = cdtoc.tracks[tracknum];
+
+		// Additional indexes are already available for descriptor-backed
+		// images.  For CHDs, recover INDEX 02+ from stored ADR=1 Q.
+		if (track.subsize != MAX_SUBCODE_DATA
+				|| track.subtype != CD_SUB_RAW)
+		{
+			continue;
+		}
+
+		int previous_index = -1;
+		int pending_index = -1;
+		int highest_index = 1;
+		uint32_t pending_frame = 0;
+
+				const disc_track *const canonical_track =
+				(tracknum < m_disc.tracks.size())
+					? &m_disc.tracks[tracknum]
+					: nullptr;
+
+		if (!canonical_track)
+			continue;
+
+		const auto program = std::find_if(
+				canonical_track->regions.begin(),
+				canonical_track->regions.end(),
+				[](const region &entry)
+				{
+					return entry.kind == region_kind::program;
+				});
+
+		if (program == canonical_track->regions.end()
+				|| !program->frames.has_value())
+		{
+			continue;
+		}
+
+		const auto index01 = std::find_if(
+				canonical_track->indexes.begin(),
+				canonical_track->indexes.end(),
+				[](const index &entry)
+				{
+					return entry.number == 1;
+				});
+
+		if (index01 == canonical_track->indexes.end())
+			continue;
+
+		for (uint32_t frame = 0; frame < *program->frames; frame++)
+		{
+			const disc_position discpos{
+					int32_t(int64_t(program->start.frame) + frame) };
+
+			uint8_t q[12];
+			q_position position;
+
+			if (!get_subcode_q(uint32_t(discpos.frame), q)
+					|| !decode_subcode_q(q, position)
+					|| position.track != canonical_track->number)
+			{
+				pending_index = -1;
+				continue;
+			}
+
+		if (position.index < 2 || position.index > MAX_INDEX)
+{
+	previous_index = position.index;
+	pending_index = -1;
+	continue;
+}
+
+// Establish an initial state without inferring a transition.
+if (previous_index < 0)
+{
+	previous_index = position.index;
+	pending_index = -1;
+	continue;
+}
+
+// Returning to the current index cancels an unconfirmed transition.
+if (position.index == previous_index)
+{
+	pending_index = -1;
+	continue;
+}
+
+// Require the new index to appear in two valid position-Q frames before
+// treating it as a real transition.  Record the first observed frame.
+if (pending_index == position.index)
+{
+		if (position.index > highest_index
+			&& track.idx[position.index] == -1
+			&& (int64_t(program->start.frame) + pending_frame)
+					>= int64_t(index01->start.frame))
+	{
+		track.idx[position.index] =
+				int32_t(
+						int64_t(program->start.frame)
+							+ pending_frame
+							- int64_t(index01->start.frame));
+		highest_index = position.index;
+	}
+
+	previous_index = position.index;
+	pending_index = -1;
+}
+else
+{
+	// A one-frame forward index followed immediately by a higher index is
+	// still a valid monotonic transition.
+	if (pending_index >= 2
+			&& position.index > pending_index
+			&& pending_index > highest_index
+			&& track.idx[pending_index] == -1
+			&& (int64_t(program->start.frame) + pending_frame)
+					>= int64_t(index01->start.frame))
+	{
+		track.idx[pending_index] =
+				int32_t(
+						int64_t(program->start.frame)
+							+ pending_frame
+							- int64_t(index01->start.frame));
+		highest_index = pending_index;
+		previous_index = pending_index;
+	}
+
+	pending_index = position.index;
+	pending_frame = frame;
+}
+		}
+	}
+}
 
 /***************************************************************************
     EXTRA UTILITIES
@@ -880,6 +2348,13 @@ const char *cdrom_file::get_subtype_string(uint32_t subtype)
 /***************************************************************************
     INTERNAL UTILITIES
 ***************************************************************************/
+void cdrom_file::reset_toc(toc &toc)
+{
+	memset(&toc, 0, sizeof(toc));
+
+	for (auto &track : toc.tracks)
+		std::fill(std::begin(track.idx), std::end(track.idx), -1);
+}
 
 /*-------------------------------------------------
     parse_metadata - parse metadata into the
@@ -901,15 +2376,65 @@ std::error_condition cdrom_file::parse_metadata(chd_file *chd, toc &toc)
 {
 	std::string metadata;
 	std::error_condition err;
-	uint32_t sessionnum = 1;
-	uint32_t sessionindex = 0;
-	uint32_t lastmetaindex = 0;
-	uint32_t metaindex = 0;
 
 	/* clear structures */
-	memset(&toc, 0, sizeof(toc));
+	reset_toc(toc);
 
 	toc.numsessions = 1;
+
+	std::array<uint32_t, MAX_TRACKS> track_sessions{};
+	track_sessions.fill(1);
+
+	uint32_t sessionnum = 1;
+	uint32_t session_track = 0;
+
+	for (uint32_t metaindex = 0; ; metaindex++)
+	{
+		std::vector<uint8_t> rawmetadata;
+		chd_metadata_tag metatag;
+		uint8_t metaflags;
+
+		err = chd->read_metadata(
+				CHDMETATAG_WILDCARD,
+				metaindex,
+				rawmetadata,
+				metatag,
+				metaflags);
+
+		if (err == chd_file::error::METADATA_NOT_FOUND)
+			break;
+
+		if (err)
+			return err;
+
+		if (metatag == CDROM_SESSION_METADATA_TAG)
+		{
+			const std::string session_metadata(
+					reinterpret_cast<const char *>(rawmetadata.data()),
+					rawmetadata.size());
+
+			if (sscanf(
+					session_metadata.c_str(),
+					CDROM_SESSION_METADATA_FORMAT,
+					&sessionnum) != 1)
+			{
+				return chd_file::error::INVALID_DATA;
+			}
+
+			if (sessionnum == 0)
+				return chd_file::error::INVALID_DATA;
+
+			toc.numsessions = std::max(toc.numsessions, sessionnum);
+		}
+		else if (metatag == CDROM_TRACK_METADATA_TAG
+				|| metatag == CDROM_TRACK_METADATA2_TAG
+				|| metatag == GDROM_OLD_METADATA_TAG
+				|| metatag == GDROM_TRACK_METADATA_TAG)
+		{
+			if (session_track < MAX_TRACKS)
+				track_sessions[session_track++] = sessionnum;
+		}
+	}
 
 	/* start with no tracks */
 	for (toc.numtrks = 0; toc.numtrks < MAX_TRACKS; toc.numtrks++)
@@ -925,24 +2450,13 @@ std::error_condition cdrom_file::parse_metadata(chd_file *chd, toc &toc)
 		std::fill(std::begin(pgtype), std::end(pgtype), 0);
 		std::fill(std::begin(pgsub), std::end(pgsub), 0);
 
-		// fetch the session metadata first
-		if (!chd->read_metadata(CDROM_SESSION_METADATA_TAG, sessionindex, metadata, metaindex))
-		{
-			if (metaindex-lastmetaindex <= 1) // the session is updated only when the metadata is next in line
-			{
-				if (sscanf(metadata.c_str(), CDROM_SESSION_METADATA_FORMAT, &sessionnum) != 1)
-					return chd_file::error::INVALID_DATA;
-				sessionindex++;
-			}
-		}
-
 		// fetch the metadata for this track
-		if (!chd->read_metadata(CDROM_TRACK_METADATA_TAG, toc.numtrks, metadata, metaindex))
+		if (!chd->read_metadata(CDROM_TRACK_METADATA_TAG, toc.numtrks, metadata))
 		{
 			if (sscanf(metadata.c_str(), CDROM_TRACK_METADATA_FORMAT, &tracknum, type, subtype, &frames) != 4)
 				return chd_file::error::INVALID_DATA;
 		}
-		else if (!chd->read_metadata(CDROM_TRACK_METADATA2_TAG, toc.numtrks, metadata, metaindex))
+		else if (!chd->read_metadata(CDROM_TRACK_METADATA2_TAG, toc.numtrks, metadata))
 		{
 			if (sscanf(metadata.c_str(), CDROM_TRACK_METADATA2_FORMAT, &tracknum, type, subtype, &frames, &pregap, pgtype, pgsub, &postgap) != 8)
 				return chd_file::error::INVALID_DATA;
@@ -950,11 +2464,11 @@ std::error_condition cdrom_file::parse_metadata(chd_file *chd, toc &toc)
 		else
 		{
 			// fall through to GD-ROM detection
-			err = chd->read_metadata(GDROM_OLD_METADATA_TAG, toc.numtrks, metadata, metaindex);
+			err = chd->read_metadata(GDROM_OLD_METADATA_TAG, toc.numtrks, metadata);
 			if (!err)
 				toc.flags |= CD_FLAG_GDROMLE; // legacy GDROM track was detected
 			else
-				err = chd->read_metadata(GDROM_TRACK_METADATA_TAG, toc.numtrks, metadata, metaindex);
+				err = chd->read_metadata(GDROM_TRACK_METADATA_TAG, toc.numtrks, metadata);
 
 			if (err)
 				break;
@@ -977,7 +2491,7 @@ std::error_condition cdrom_file::parse_metadata(chd_file *chd, toc &toc)
 		if (track->datasize == 0)
 			return chd_file::error::INVALID_DATA;
 
-		track->session = sessionnum - 1;
+		track->session = track_sessions[toc.numtrks] - 1;
 		// extract the subtype and determine the subcode data size
 		track->subtype = CD_SUB_NONE;
 		track->subsize = 0;
@@ -1007,21 +2521,16 @@ std::error_condition cdrom_file::parse_metadata(chd_file *chd, toc &toc)
 
 		/* set the postgap info */
 		track->postgap = postgap;
-		lastmetaindex = metaindex; 
 	}
-
-	toc.numsessions = sessionnum;
 
 	if (toc.numsessions > 1)
 		toc.flags |= CD_FLAG_MULTISESSION;
 
-	/* if we got any tracks this way, we're done */
+	// if we got any tracks this way, we're done
 	if (toc.numtrks > 0)
 		return std::error_condition();
 
-	osd_printf_info("toc.numtrks = %u?!\n", toc.numtrks);
-
-	/* look for old-style metadata */
+	// look for old-style metadata
 	std::vector<uint8_t> oldmetadata;
 	err = chd->read_metadata(CDROM_OLD_METADATA_TAG, 0, oldmetadata);
 	if (err)
@@ -1106,15 +2615,15 @@ std::error_condition cdrom_file::write_metadata(chd_file *chd, const toc &toc)
 		}
 
 		std::string metadata;
-		
-		if (toc.numsessions > 1 && sessionnum != toc.tracks[i].session)
+
+			if (toc.numsessions > 1 && sessionnum != toc.tracks[i].session)
 		{
 			metadata = util::string_format(CDROM_SESSION_METADATA_FORMAT, toc.tracks[i].session+1);
-			err = chd->write_metadata(CDROM_SESSION_METADATA_TAG, toc.tracks[i].session, metadata);
-	
+			err = chd->write_metadata(CDROM_SESSION_METADATA_TAG, i, metadata);
+
 			if (err)
 				return err;
-		
+
 			sessionnum = toc.tracks[i].session;
 		}
 
@@ -1135,12 +2644,12 @@ std::error_condition cdrom_file::write_metadata(chd_file *chd, const toc &toc)
 					toc.tracks[i].postgap);
 			err = chd->write_metadata(CDROM_TRACK_METADATA2_TAG, i, metadata);
 		}
-		if (err)
+				if (err)
 			return err;
 	}
+
 	return std::error_condition();
 }
-
 /**
  * @brief   -------------------------------------------------
  *            ECC lookup tables pre-calculated tables for ECC data calcs
@@ -1894,7 +3403,7 @@ std::error_condition cdrom_file::parse_nero(std::string_view tocfname, toc &outt
 	path = get_file_path(path);
 
 	/* clear structures */
-	memset(&outtoc, 0, sizeof(outtoc));
+	reset_toc(outtoc);
 	outinfo.reset();
 
 	outtoc.numsessions = 1;
@@ -2073,7 +3582,7 @@ std::error_condition cdrom_file::parse_iso(std::string_view tocfname, toc &outto
 	path = get_file_path(path);
 
 	/* clear structures */
-	memset(&outtoc, 0, sizeof(outtoc));
+	reset_toc(outtoc);
 	outinfo.reset();
 
 	uint64_t size = get_file_size(tocfname);
@@ -2165,7 +3674,7 @@ std::error_condition cdrom_file::parse_gdi(std::string_view tocfname, toc &outto
 	path = get_file_path(path);
 
 	/* clear structures */
-	memset(&outtoc, 0, sizeof(outtoc));
+	reset_toc(outtoc);
 	outinfo.reset();
 
 	outtoc.flags = CD_FLAG_GDROM;
@@ -2402,7 +3911,7 @@ std::error_condition cdrom_file::parse_cue(std::string_view tocfname, toc &outto
 	path = get_file_path(path);
 
 	/* clear structures */
-	memset(&outtoc, 0, sizeof(outtoc));
+	reset_toc(outtoc);
 	outinfo.reset();
 
 	trknum = -1;
@@ -2713,6 +4222,30 @@ std::error_condition cdrom_file::parse_cue(std::string_view tocfname, toc &outto
 			return chd_file::error::INVALID_DATA;
 		}
 
+		// additional indexes must occur in ascending frame order
+		int32_t previous_index_frame = outinfo.track[trknum].idx[1];
+		for (int idx = 2; idx <= MAX_INDEX; idx++)
+		{
+			if (outinfo.track[trknum].idx[idx] == -1)
+				continue;
+
+			if (outinfo.track[trknum].idx[idx] <= previous_index_frame)
+			{
+				osd_printf_error("ERROR: track %d INDEX %02d does not follow the previous index\n", trknum + 1, idx);
+				return chd_file::error::INVALID_DATA;
+			}
+
+			previous_index_frame = outinfo.track[trknum].idx[idx];
+		}
+
+		outtoc.tracks[trknum].idx[1] = 0;
+
+		for (int idx = 2; idx <= MAX_INDEX; idx++)
+		{
+			if (outinfo.track[trknum].idx[idx] != -1)
+				outtoc.tracks[trknum].idx[idx] = outinfo.track[trknum].idx[idx] - outinfo.track[trknum].idx[1];
+		}
+
 		/* this is true for cue/bin and cue/iso, and we need it for cue/wav since .WAV is little-endian */
 		if (outtoc.tracks[trknum].trktype == CD_TRACK_AUDIO)
 		{
@@ -3001,7 +4534,7 @@ std::error_condition cdrom_file::parse_toc(std::string_view tocfname, toc &outto
 	path = get_file_path(path);
 
 	/* clear structures */
-	memset(&outtoc, 0, sizeof(outtoc));
+	reset_toc(outtoc);
 	outinfo.reset();
 
 	int trknum = -1;

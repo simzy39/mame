@@ -422,11 +422,52 @@ class chd_cd_compressor : public chd_file_compressor
 {
 public:
 	// construction/destruction
-	chd_cd_compressor(cdrom_file::toc &toc, cdrom_file::track_input_info &info)
+		chd_cd_compressor(
+			const cdrom_file::toc &source_toc,
+			cdrom_file::track_input_info &info)
 		: m_file()
-		, m_toc(toc)
+		, m_source_toc(source_toc)
 		, m_info(info)
 	{
+		// Build the absolute INDEX 01 position for each track using the
+		// same logical disc layout used by cdrom_file.
+		int64_t logical_offset = 0;
+		int64_t first_track_start = 0;
+
+		for (int tracknum = 0; tracknum < m_source_toc.numtrks; tracknum++)
+		{
+			const cdrom_file::track_info &track = m_source_toc.tracks[tracknum];
+
+			int64_t track_start = 0;
+
+			if (track.pgdatasize == 0)
+				logical_offset += track.pregap;
+			else
+				track_start = track.pregap;
+
+			if ((m_source_toc.flags & cdrom_file::CD_FLAG_MULTISESSION)
+					&& m_info.track[tracknum].leadin != -1)
+			{
+				logical_offset += m_info.track[tracknum].leadin;
+			}
+
+			track_start += logical_offset;
+
+			if (tracknum == 0)
+				first_track_start = track_start;
+
+			m_q_track_start[tracknum] =
+					track_start + 150 - first_track_start;
+
+			logical_offset += track.postgap;
+			logical_offset += track.frames;
+
+			if ((m_source_toc.flags & cdrom_file::CD_FLAG_MULTISESSION)
+					&& m_info.track[tracknum].leadout != -1)
+			{
+				logical_offset += m_info.track[tracknum].leadout;
+			}
+		}
 	}
 
 	~chd_cd_compressor()
@@ -447,9 +488,9 @@ public:
 		// find out which track we're starting in
 		uint64_t startoffs = 0;
 		uint32_t length_remaining = length;
-		for (int tracknum = 0; tracknum < m_toc.numtrks; tracknum++)
+		for (int tracknum = 0; tracknum < m_source_toc.numtrks; tracknum++)
 		{
-			const cdrom_file::track_info &trackinfo = m_toc.tracks[tracknum];
+			const cdrom_file::track_info &trackinfo = m_source_toc.tracks[tracknum];
 			uint64_t endoffs = startoffs + (uint64_t)(trackinfo.frames + trackinfo.extraframes) * cdrom_file::FRAME_SIZE;
 
 			if (offset >= startoffs && offset < endoffs)
@@ -475,59 +516,138 @@ public:
 				if ((uint64_t)trackinfo.splitframes == 0L)
 					split_track_start = UINT64_MAX;
 
-				while (length_remaining != 0 && offset < endoffs)
+while (length_remaining != 0 && offset < endoffs)
+{
+	const uint64_t frame_in_track =
+			(offset - startoffs) / cdrom_file::FRAME_SIZE;
+
+	const bool real_frame = frame_in_track < trackinfo.frames;
+
+	// CHD alignment frames are not real disc sectors.  Leave them zero.
+	if (real_frame)
+	{
+		const uint64_t src_frame_start =
+				src_track_start + frame_in_track * bytesperframe;
+
+		std::array<uint8_t, cdrom_file::FRAME_SIZE> source_frame = { };
+
+		// auto-advance next track for split-bin read
+		if (src_frame_start >= split_track_start
+				&& src_frame_start < src_track_end
+				&& m_lastfile.compare(m_info.track[tracknum + 1].fname) != 0)
+		{
+			m_file.reset();
+			m_lastfile = m_info.track[tracknum + 1].fname;
+
+			std::error_condition const filerr =
+					util::core_file::open(m_lastfile, OPEN_FLAG_READ, m_file);
+
+			if (filerr)
+				report_error(
+						1,
+						"Error opening input file (%s): %s",
+						m_lastfile,
+						filerr.message());
+		}
+
+		if (src_frame_start < src_track_end)
+		{
+			// Leave source_frame zeroed for padding inserted by the
+			// descriptor; otherwise read the captured source frame.
+			if (!(src_frame_start >= pad_track_start
+					&& src_frame_start < split_track_start))
+			{
+				std::error_condition err = m_file->seek(
+						(src_frame_start >= split_track_start)
+							? src_frame_start - split_track_start
+							: src_frame_start,
+						SEEK_SET);
+
+				std::size_t count = 0;
+
+				if (!err)
+					std::tie(err, count) =
+							read(*m_file, source_frame.data(), bytesperframe);
+
+				if (err || (count != bytesperframe))
+					report_error(1, "Error reading input file (%s)", m_lastfile);
+			}
+
+			// CHD CD frames always reserve 2352 bytes for sector data
+			// followed by 96 bytes for subcode.
+			memcpy(dest, source_frame.data(), trackinfo.datasize);
+
+			if (trackinfo.subsize != 0)
+			{
+				memcpy(
+						dest + cdrom_file::MAX_SECTOR_DATA,
+						source_frame.data() + trackinfo.datasize,
+						trackinfo.subsize);
+			}
+
+			// swap if appropriate
+			if (m_info.track[tracknum].swap)
+			{
+				for (uint32_t swapindex = 0;
+						swapindex < trackinfo.datasize;
+						swapindex += 2)
 				{
-					// determine start of current frame
-					uint64_t src_frame_start = src_track_start + ((offset - startoffs) / cdrom_file::FRAME_SIZE) * bytesperframe;
-
-					// auto-advance next track for split-bin read
-					if (src_frame_start >= split_track_start && src_frame_start < src_track_end && m_lastfile.compare(m_info.track[tracknum+1].fname)!=0)
-					{
-						m_file.reset();
-						m_lastfile = m_info.track[tracknum+1].fname;
-						std::error_condition const filerr = util::core_file::open(m_lastfile, OPEN_FLAG_READ, m_file);
-						if (filerr)
-							report_error(1, "Error opening input file (%s): %s", m_lastfile, filerr.message());
-					}
-
-					if (src_frame_start < src_track_end)
-					{
-						// read it in, or pad if we're into the padframes
-						if (src_frame_start >= pad_track_start && src_frame_start < split_track_start)
-						{
-							memset(dest, 0, bytesperframe);
-						}
-						else
-						{
-							std::error_condition err = m_file->seek(
-									(src_frame_start >= split_track_start)
-										? src_frame_start - split_track_start
-										: src_frame_start,
-									SEEK_SET);
-							std::size_t count = 0;
-							if (!err)
-								std::tie(err, count) = read(*m_file, dest, bytesperframe);
-							if (err || (count != bytesperframe))
-								report_error(1, "Error reading input file (%s)'", m_lastfile);
-						}
-
-						// swap if appropriate
-						if (m_info.track[tracknum].swap)
-							for (uint32_t swapindex = 0; swapindex < 2352; swapindex += 2)
-							{
-								uint8_t temp = dest[swapindex];
-								dest[swapindex] = dest[swapindex + 1];
-								dest[swapindex + 1] = temp;
-							}
-					}
-
-					// advance
-					offset += cdrom_file::FRAME_SIZE;
-					dest += cdrom_file::FRAME_SIZE;
-					length_remaining -= cdrom_file::FRAME_SIZE;
-					if (length_remaining == 0)
-						break;
+					uint8_t temp = dest[swapindex];
+					dest[swapindex] = dest[swapindex + 1];
+					dest[swapindex + 1] = temp;
 				}
+			}
+
+			// Descriptor-only sources have no captured subcode.  Generate
+			// ADR=1 position Q and store it in the CHD raw P-W area.
+			if (trackinfo.subsize == 0
+					&& !(m_source_toc.flags & cdrom_file::CD_FLAG_GDROM))
+			{
+				const int64_t stored_pregap =
+						trackinfo.pgdatasize != 0
+							? int64_t(trackinfo.pregap)
+							: 0;
+
+				const int64_t track_frame =
+						int64_t(frame_in_track) - stored_pregap;
+
+				const int64_t absolute_frame =
+						m_q_track_start[tracknum] + track_frame;
+
+				cdrom_file::q_position position;
+
+				if (!cdrom_file::make_subcode_q_position(
+						m_source_toc,
+						tracknum,
+						track_frame,
+						absolute_frame,
+						position))
+				{
+					report_error(
+						1,
+						"Unable to generate Q subcode for track %d frame %" I64FMT "u",
+						tracknum + 1,
+						frame_in_track);
+				}
+
+				uint8_t q[12];
+
+				cdrom_file::encode_subcode_q(position, q);
+				cdrom_file::pack_subcode_q(
+						q,
+						dest + cdrom_file::MAX_SECTOR_DATA);
+			}
+		}
+	}
+
+	// advance
+	offset += cdrom_file::FRAME_SIZE;
+	dest += cdrom_file::FRAME_SIZE;
+	length_remaining -= cdrom_file::FRAME_SIZE;
+
+	if (length_remaining == 0)
+		break;
+}
 			}
 
 			// next track starts after the previous one
@@ -540,8 +660,9 @@ private:
 	// internal state
 	std::string                   m_lastfile;
 	util::core_file::ptr          m_file;
-	cdrom_file::toc &             m_toc;
+	const cdrom_file::toc &       m_source_toc;
 	cdrom_file::track_input_info &m_info;
+	std::array<int64_t, cdrom_file::MAX_TRACKS> m_q_track_start = { };
 };
 
 
@@ -1588,6 +1709,17 @@ void output_track_metadata(int mode, util::core_file &file, int tracknum, const 
 			file.printf("    INDEX 01 %s\n", msf_string_from_frames(frameoffs));
 		}
 
+		// output additional indexes
+		const uint32_t index1offs = frameoffs + ((info.pregap > 0 && info.pgdatasize > 0) ? info.pregap : 0);
+
+		for (int index = 2; index <= cdrom_file::MAX_INDEX; index++)
+		{
+			if (info.idx[index] == -1)
+				continue;
+
+			file.printf("    INDEX %02d %s\n", index, msf_string_from_frames(index1offs + info.idx[index]));
+		}
+
 		// output POSTGAP
 		if (info.postgap > 0)
 			file.printf("    POSTGAP %s\n", msf_string_from_frames(info.postgap));
@@ -1848,6 +1980,8 @@ static void do_verify(parameters_map &params)
 				report_error(1, "Error updating SHA1: %s", err.message());
 			util::stream_format(std::cout, "SHA1 updated to correct value in input CHD\n");
 		}
+		else
+			report_error(1, "CHD verification failed");
 	}
 	else
 	{
@@ -1872,6 +2006,8 @@ static void do_verify(parameters_map &params)
 						report_error(1, "Error updating SHA1: %s", err.message());
 					util::stream_format(std::cout, "SHA1 updated to correct value in input CHD\n");
 				}
+				else
+					report_error(1, "CHD verification failed");
 			}
 		}
 	}
@@ -2217,6 +2353,26 @@ static void do_create_cd(parameters_map &params)
 		totalsectors += trackinfo.frames + trackinfo.extraframes;
 	}
 
+	// Keep the source layout separate from the metadata describing
+	// what will be stored in the CHD.
+	cdrom_file::toc source_toc = toc;
+
+	// Descriptor-only sources have no captured subcode.  Store generated
+	// Q in the CHD as raw P-W subcode.
+	if (!is_gdrom)
+	{
+		for (int tracknum = 0; tracknum < toc.numtrks; tracknum++)
+		{
+			cdrom_file::track_info &track = toc.tracks[tracknum];
+
+			if (source_toc.tracks[tracknum].subsize == 0)
+			{
+				track.subtype = cdrom_file::CD_SUB_RAW;
+				track.subsize = cdrom_file::MAX_SUBCODE_DATA;
+			}
+		}
+	}
+
 	// print some info
 	util::stream_format(std::cout, "Output CHD:   %s\n", *output_chd_str);
 	if (output_parent.opened())
@@ -2231,7 +2387,7 @@ static void do_create_cd(parameters_map &params)
 	try
 	{
 		// create the new CD
-		auto chd = std::make_unique<chd_cd_compressor>(toc, track_info);
+		auto chd = std::make_unique<chd_cd_compressor>(source_toc, track_info);
 		create_output_chd(*chd, *output_chd_str, uint64_t(totalsectors) * cdrom_file::FRAME_SIZE, hunk_size, cdrom_file::FRAME_SIZE, compression, output_parent);
 
 		// add the standard CD metadata; we do this even if we have a parent because it might be different
@@ -2661,6 +2817,7 @@ static void do_extract_cd(parameters_map &params)
 
 	// further process input file
 	cdrom_file *cdrom = new cdrom_file(&input_chd);
+
 	const cdrom_file::toc &toc = cdrom->get_toc();
 
 	// verify output file doesn't exist

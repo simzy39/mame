@@ -17,9 +17,11 @@
 #include "osdcore.h"
 
 #include <algorithm>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <vector>
 
 
 class cdrom_file {
@@ -82,6 +84,102 @@ public:
 		CD_FLAG_ADR_ISRC_CODE,
 	};
 
+	struct sector_position
+	{
+		int64_t frame;
+	};
+
+	struct channel_position
+	{
+		int64_t frame;
+		uint8_t byte_offset;
+	};
+
+	struct subcode_position
+	{
+		int64_t frame;
+	};
+
+	struct disc_position
+	{
+		int32_t frame;
+	};
+
+	struct captured_position
+	{
+		std::optional<sector_position> sector_data;
+		std::optional<channel_position> main_channel;
+		std::optional<subcode_position> subcode;
+	};
+
+	struct backing_span
+	{
+		disc_position start;
+		std::optional<uint32_t> frames;
+		captured_position captured;
+	};
+
+	enum class region_kind
+	{
+		lead_in,
+		pregap,
+		program,
+		postgap,
+		lead_out
+	};
+
+	enum class region_presence
+	{
+		unknown,
+		generated,
+		captured
+	};
+
+	struct region
+	{
+	    region_kind kind;
+	    disc_position start;
+	    std::optional<uint32_t> frames;
+	    region_presence main_data;
+	    region_presence subcode;
+		std::vector<backing_span> backing;
+	};
+
+	struct index
+	{
+		uint8_t number;
+		disc_position start;
+	};
+
+	struct disc_track
+	{
+		uint8_t number;
+		uint8_t session;
+		uint32_t type;
+		uint32_t control_flags;
+
+		std::vector<index> indexes;
+		std::vector<region> regions;
+	};
+
+	struct disc_session
+	{
+		uint8_t number;
+		uint8_t first_track;
+		uint8_t last_track;
+
+		disc_position program_start;
+
+		std::optional<region> lead_in;
+		std::optional<region> lead_out;
+	};
+
+	struct disc
+	{
+		std::vector<disc_session> sessions;
+		std::vector<disc_track> tracks;
+	};
+
 	struct track_info
 	{
 		/* fields used by CHDMAN and in MAME */
@@ -99,6 +197,7 @@ public:
 		uint32_t pgsubsize;     /* size of subchannel data in each sector of the pregap */
 		uint32_t control_flags; /* metadata flags associated with each track */
 		uint32_t session;       /* session number */
+		int32_t idx[MAX_INDEX + 1]; /* index positions relative to the track */
 
 		/* fields used in CHDMAN only */
 		uint32_t padframes;   /* number of frames of padding to add to the end of the track; needed for GDI */
@@ -142,6 +241,66 @@ public:
 		track_input_entry track[MAX_TRACKS];
 	};
 
+	enum class q_type
+	{
+		invalid,
+		position,
+		lead_in_toc,
+		lead_out,
+		catalog,
+		isrc,
+		unknown
+	};
+
+	struct q_position
+	{
+		uint8_t adr_control;
+		uint8_t track;
+		uint8_t index;
+		uint32_t relative_frame;
+		uint32_t absolute_frame;
+	};
+
+	struct q_toc
+	{
+	uint8_t adr_control;
+	uint8_t point;
+	uint8_t minute;
+	uint8_t second;
+	uint8_t frame;
+	};
+
+	enum class q_toc_kind
+	{
+		track,
+		first_track,
+		last_track,
+		lead_out,
+		special
+	};
+
+	struct q_toc_semantics
+	{
+		uint8_t adr_control;
+		q_toc_kind kind;
+		uint8_t point;
+
+		std::optional<uint8_t> track;
+		std::optional<uint32_t> start_frame;
+		std::optional<uint8_t> disc_type;
+	};
+
+	struct q_toc_accumulator
+	{
+		std::optional<uint8_t> first_track;
+		std::optional<uint8_t> last_track;
+		std::optional<uint32_t> lead_out_start_frame;
+		std::optional<uint8_t> disc_type;
+		std::vector<q_toc_semantics> tracks;
+		bool conflict = false;
+
+		bool complete() const;
+	};
 
 	cdrom_file(chd_file *chd);
 	cdrom_file(std::string_view inputfile);
@@ -151,10 +310,42 @@ public:
 	/* core read access */
 	bool read_data(uint32_t lbasector, void *buffer, uint32_t datatype, bool phys=false);
 	bool read_subcode(uint32_t lbasector, void *buffer, bool phys=false);
+	bool get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys=false) const;
+	bool get_subcode_raw(uint32_t lbasector, uint8_t *buffer, bool phys=false) const;
+
+	static q_type classify_subcode_q(const uint8_t *q);
+	static void encode_subcode_q(const q_position &position, uint8_t *buffer);
+	static bool decode_subcode_q(const uint8_t *q, q_position &position);
+	static bool decode_subcode_q_toc(const uint8_t *q, q_toc &toc);
+	static bool interpret_subcode_q_toc(
+			const q_toc &toc,
+			q_toc_semantics &semantics);
+	static bool accumulate_subcode_q_toc(
+			const uint8_t *q,
+			q_toc_accumulator &accumulator);
+	static bool accumulate_q_toc_semantics(
+			const q_toc_semantics &semantics,
+			q_toc_accumulator &accumulator);
+	static bool apply_q_toc_accumulator(
+			const q_toc_accumulator &accumulator,
+			disc &disc,
+			uint8_t session_number);
+	static bool apply_q_toc_semantics(
+			const q_toc_semantics &semantics,
+			disc &disc,
+			uint8_t session_number);
+	static void pack_subcode_q(const uint8_t *q, uint8_t *subcode);
+	static void unpack_subcode_q(const uint8_t *subcode, uint8_t *q);
+	static bool make_subcode_q_position(
+			const disc_track &track,
+			disc_position position,
+			int64_t track_frame,
+			int64_t absolute_frame,
+			q_position &q);
 
 	/* handy utilities */
 	uint32_t get_track(uint32_t frame) const;
-	uint32_t get_track_start(uint32_t track) const {return cdtoc.tracks[track == 0xaa ? cdtoc.numtrks : track].logframeofs; }
+	uint32_t get_track_start(uint32_t track) const;
 	uint32_t get_track_start_phys(uint32_t track) const { return cdtoc.tracks[track == 0xaa ? cdtoc.numtrks : track].physframeofs; }
 	uint32_t get_track_index(uint32_t frame) const;
 
@@ -179,6 +370,51 @@ public:
 	}
 	int get_track_type(int track) const { return cdtoc.tracks[track].trktype; }
 	const toc &get_toc() const { return cdtoc; }
+
+	const disc &get_disc() const;
+	disc build_disc() const;
+
+	static const disc_track *find_track(
+			const disc &disc,
+			disc_position position);
+	static std::optional<sector_position> backing_sector_position(
+			const disc &disc,
+			disc_position position);
+	static std::optional<disc_position> disc_position_from_sector_position(
+			const disc &disc,
+			sector_position position);
+	static std::optional<channel_position> backing_channel_position(
+			const disc &disc,
+			disc_position position);
+	static std::optional<subcode_position> backing_subcode_position(
+			const disc &disc,
+			disc_position position);
+	static const region *find_region(
+			const disc_track &track,
+			disc_position position);
+	static std::optional<sector_position> backing_sector_position(
+			const disc_track &track,
+			disc_position position);
+	static std::optional<channel_position> backing_channel_position(
+			const disc_track &track,
+			disc_position position);
+	static std::optional<subcode_position> backing_subcode_position(
+			const disc_track &track,
+			disc_position position);
+	static const backing_span *find_backing_span(
+			const region &region,
+			disc_position position);
+	static std::optional<sector_position> backing_sector_position(
+			const region &region,
+			disc_position position);
+	static std::optional<channel_position> backing_channel_position(
+			const region &region,
+			disc_position position);
+	static std::optional<subcode_position> backing_subcode_position(
+			const region &region,
+			disc_position position);
+	static bool validate_backing_spans(const region &region);
+	void reconstruct_track_indexes();
 
 	/* extra utilities */
 	static void convert_type_string_to_track_info(const char *typestring, track_info *info);
@@ -277,18 +513,23 @@ private:
 	chd_file *           chd;                /* CHD file */
 	/** @brief  The cdtoc. */
 	toc                  cdtoc;              /* TOC for the CD */
+	/** @brief  The canonical disc model. */
+	disc                 m_disc;             /* canonical disc model */
 	/** @brief  Information describing the track. */
 	track_input_info     cdtrack_info;       /* track info */
 	/** @brief  The fhandle[ CD maximum tracks]. */
 	util::random_read::ptr fhandle[MAX_TRACKS];/* file handle */
 
-	inline uint32_t physical_to_chd_lba(uint32_t physlba, uint32_t &tracknum) const;
-	inline uint32_t logical_to_chd_lba(uint32_t physlba, uint32_t &tracknum) const;
+	inline uint32_t physical_to_chd_lba(
+		uint32_t physlba,
+		uint32_t tracknum) const;
+	static uint16_t subcode_q_crc(const uint8_t *data);
 
+	static void reset_toc(toc &toc);
 	static void get_info_from_type_string(const char *typestring, uint32_t *trktype, uint32_t *datasize);
 	static uint8_t ecc_source_byte(const uint8_t *sector, uint32_t offset);
 	static void ecc_compute_bytes(const uint8_t *sector, const uint16_t *row, int rowlen, uint8_t &val1, uint8_t &val2);
-	std::error_condition read_partial_sector(void *dest, uint32_t lbasector, uint32_t chdsector, uint32_t tracknum, uint32_t startoffs, uint32_t length, bool phys);
+	std::error_condition read_partial_sector(void *dest, uint32_t chdsector, uint32_t tracknum, uint32_t startoffs, uint32_t length);
 
 	static std::string get_file_path(std::string &path);
 	static uint64_t get_file_size(std::string_view filename);
