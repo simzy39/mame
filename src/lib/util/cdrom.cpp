@@ -593,6 +593,23 @@ static bool from_bcd(uint8_t value, uint8_t &result)
 	return true;
 }
 
+static bool from_isrc_char(uint8_t value, char &result)
+{
+	if (value <= 0x09)
+	{
+		result = char('0' + value);
+		return true;
+	}
+
+	if (value >= 0x11 && value <= 0x2a)
+	{
+		result = char('A' + (value - 0x11));
+		return true;
+	}
+
+	return false;
+}
+
 void cdrom_file::unpack_subcode_q(const uint8_t *subcode, uint8_t *q)
 {
 	for (int byte = 0; byte < 12; byte++)
@@ -798,6 +815,63 @@ bool cdrom_file::decode_subcode_q_catalog(
 
 	std::copy(std::begin(digits), std::end(digits), catalog.number.begin());
 	catalog.absolute_frame = absolute_frame;
+
+	return true;
+}
+
+bool cdrom_file::decode_subcode_q_isrc(
+		const uint8_t *q,
+		q_isrc &isrc)
+{
+	if (classify_subcode_q(q) != q_type::isrc)
+		return false;
+
+	// I1-I5 occupy 30 bits, MSB first, followed by two reserved zero bits.
+	const uint32_t first_five =
+			(uint32_t(q[1]) << 24)
+				| (uint32_t(q[2]) << 16)
+				| (uint32_t(q[3]) << 8)
+				| uint32_t(q[4]);
+
+	if ((first_five & 0x03) != 0)
+		return false;
+
+	for (int character = 0; character < 5; character++)
+	{
+		const uint8_t value =
+				(first_five >> (26 - character * 6)) & 0x3f;
+
+		if (!from_isrc_char(value, isrc.code[character]))
+			return false;
+	}
+
+	// I6-I12 are seven BCD digits.  The low nibble after I12 is reserved.
+	if ((q[8] & 0x0f) != 0)
+		return false;
+
+	for (int digit = 0; digit < 7; digit++)
+	{
+		const uint8_t value =
+				(digit & 1)
+					? (q[5 + (digit >> 1)] & 0x0f)
+					: (q[5 + (digit >> 1)] >> 4);
+
+		if (value > 9)
+			return false;
+
+		isrc.code[5 + digit] = char('0' + value);
+	}
+
+	uint8_t absolute_frame;
+
+	if (!from_bcd(q[9], absolute_frame) || absolute_frame >= 75)
+		return false;
+
+	isrc.adr_control =
+			((q[0] & 0x0f) << 4)
+				| ((q[0] & 0xf0) >> 4);
+
+	isrc.absolute_frame = absolute_frame;
 
 	return true;
 }
