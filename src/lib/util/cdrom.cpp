@@ -1272,9 +1272,25 @@ bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) c
 				logical_frame - int64_t(index01->start.frame);
 	}
 
+		if (m_disc.tracks.empty())
+		return false;
+
+	const disc_track &first_track = m_disc.tracks.front();
+
+	const auto first_index01 = std::find_if(
+			first_track.indexes.begin(),
+			first_track.indexes.end(),
+			[](const index &entry)
+			{
+				return entry.number == 1;
+			});
+
+	if (first_index01 == first_track.indexes.end())
+		return false;
+
 	// Track 1 INDEX 01 corresponds to absolute 00:02:00.
 	const int64_t absolute_frame =
-			logical_frame + 150 - int64_t(cdtoc.tracks[0].logframeofs);
+			logical_frame + 150 - int64_t(first_index01->start.frame);
 
 		q_position q;
 
