@@ -508,6 +508,20 @@ public:
 	const disc &get_disc() const;
 	disc build_disc() const;
 
+	struct cdm1_section_descriptor
+	{
+		uint32_t type;
+		uint16_t version;
+		uint16_t flags;
+		uint32_t offset;
+		uint32_t length;
+		uint32_t count;
+	};
+
+	static std::error_condition parse_cdm1_directory(
+			const std::vector<uint8_t> &metadata,
+			std::vector<cdm1_section_descriptor> &sections);
+
 	static std::error_condition validate_cdm1_metadata(
 			const std::vector<uint8_t> &metadata);
 
