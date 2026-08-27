@@ -17,6 +17,7 @@
 #include "osdcore.h"
 
 #include <algorithm>
+#include <array>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -261,6 +262,20 @@ public:
 		uint32_t absolute_frame;
 	};
 
+	struct q_catalog
+	{
+		uint8_t adr_control;
+		std::array<char, 13> number;
+		uint8_t absolute_frame;
+	};
+
+	struct q_isrc
+	{
+		uint8_t adr_control;
+		std::array<char, 12> code;
+		uint8_t absolute_frame;
+	};
+
 	struct q_toc
 	{
 	uint8_t adr_control;
@@ -316,6 +331,12 @@ public:
 	static q_type classify_subcode_q(const uint8_t *q);
 	static void encode_subcode_q(const q_position &position, uint8_t *buffer);
 	static bool decode_subcode_q(const uint8_t *q, q_position &position);
+	static bool decode_subcode_q_catalog(
+			const uint8_t *q,
+			q_catalog &catalog);
+	static bool decode_subcode_q_isrc(
+			const uint8_t *q,
+			q_isrc &isrc);
 	static bool decode_subcode_q_toc(const uint8_t *q, q_toc &toc);
 	static bool interpret_subcode_q_toc(
 			const q_toc &toc,
