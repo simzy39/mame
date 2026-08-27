@@ -832,6 +832,12 @@ TEST_CASE("CD-ROM Q subchannel later-track virtual pregap", "[util][cdrom]")
 	REQUIRE(q[9] == 0x00);
 	require_valid_q_crc(q);
 
+	// Canonical track lookup must assign the virtual pregap to track 2.
+	REQUIRE(cd.get_track(224) == 0);
+	REQUIRE(cd.get_track(225) == 1);
+	REQUIRE(cd.get_track(374) == 1);
+	REQUIRE(cd.get_track(375) == 1);
+	
 	// Runtime index lookup must also associate the virtual pregap with track 2.
 	REQUIRE(cd.get_track_index(225) == 0);
 	REQUIRE(cd.get_track_index(374) == 0);
