@@ -1659,6 +1659,44 @@ std::optional<cdrom_file::sector_position> cdrom_file::backing_sector_position(
 	return backing_sector_position(*track, position);
 }
 
+std::optional<cdrom_file::disc_position> cdrom_file::disc_position_from_sector_position(
+		const disc &disc,
+		sector_position position)
+{
+	for (const disc_track &track : disc.tracks)
+	{
+		for (const region &region : track.regions)
+		{
+			for (const backing_span &span : region.backing)
+			{
+				if (!span.captured.sector_data.has_value())
+					continue;
+
+				const int64_t captured_start =
+						span.captured.sector_data->frame;
+
+				if (position.frame < captured_start)
+					continue;
+
+				const int64_t offset =
+						position.frame - captured_start;
+
+				if (span.frames.has_value()
+						&& offset >= int64_t(*span.frames))
+				{
+					continue;
+				}
+
+				return disc_position{
+						int32_t(int64_t(span.start.frame) + offset)
+				};
+			}
+		}
+	}
+
+	return std::nullopt;
+}
+
 std::optional<cdrom_file::channel_position> cdrom_file::backing_channel_position(
 		const disc &disc,
 		disc_position position)
