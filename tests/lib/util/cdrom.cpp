@@ -526,7 +526,7 @@ TEST_CASE("CD-ROM region supports multiple backing spans", "[util][cdrom]")
 	REQUIRE_FALSE(
 			cdrom_file::disc_position_from_sector_position(
 					lookup_disc, { 700 }).has_value());
-	
+
 	REQUIRE_FALSE(
 			cdrom_file::backing_channel_position(
 					lookup_disc, { 1000 }).has_value());
@@ -784,7 +784,7 @@ TEST_CASE("CD-ROM Q subchannel virtual pregap", "[util][cdrom]")
 	REQUIRE(cd.get_track_index(0) == 0);
 	REQUIRE(cd.get_track_index(149) == 0);
 	REQUIRE(cd.get_track_index(150) == 1);
-	
+
 	std::filesystem::remove_all(tempdir);
 }
 
@@ -869,7 +869,7 @@ TEST_CASE("CD-ROM Q subchannel later-track virtual pregap", "[util][cdrom]")
 	REQUIRE(cd.get_track(225) == 1);
 	REQUIRE(cd.get_track(374) == 1);
 	REQUIRE(cd.get_track(375) == 1);
-	
+
 	// Runtime index lookup must also associate the virtual pregap with track 2.
 	REQUIRE(cd.get_track_index(225) == 0);
 	REQUIRE(cd.get_track_index(374) == 0);
@@ -970,12 +970,12 @@ TEST_CASE("CD-ROM raw subcode later-track virtual pregap", "[util][cdrom]")
 
 	const cdrom_file::region &track2_pregap = track2.regions[0];
 	REQUIRE(track2_pregap.kind == cdrom_file::region_kind::pregap);
-	REQUIRE(track2_pregap.subcode == cdrom_file::region_presence::unknown);
+				== cdrom_file::region_presence::unknown);
 	REQUIRE(track2_pregap.backing.empty());
 
 	const cdrom_file::region &track2_program = track2.regions[1];
 	REQUIRE(track2_program.kind == cdrom_file::region_kind::program);
-	REQUIRE(track2_program.subcode == cdrom_file::region_presence::unknown);
+				== cdrom_file::region_presence::unknown);
 
 	REQUIRE(track2_program.backing.size() == 1);
 	REQUIRE(track2_program.backing[0].start.frame == 375);
@@ -1075,7 +1075,7 @@ TEST_CASE("CD-ROM raw subcode later-track virtual pregap", "[util][cdrom]")
 	REQUIRE_FALSE(
 			cdrom_file::backing_subcode_position(
 					disc, { 375 }).has_value());
-	
+
 	uint8_t subcode[96];
 	uint8_t q[12];
 
@@ -1195,7 +1195,7 @@ TEST_CASE("CD-ROM canonical disc model distinguishes virtual and stored pregaps"
 		REQUIRE(pregap.kind == cdrom_file::region_kind::pregap);
 		REQUIRE(pregap.frames.has_value());
 		REQUIRE(*pregap.frames == 150);
-		REQUIRE(pregap.main_data == cdrom_file::region_presence::unknown);
+				== cdrom_file::region_presence::unknown);
 		REQUIRE(pregap.start.frame == 0);
 		REQUIRE(pregap.backing.empty());
 
@@ -1534,7 +1534,7 @@ TEST_CASE("CD-ROM Q subchannel later-track stored pregap", "[util][cdrom]")
 					disc, { 375 });
 	REQUIRE(position.has_value());
 	REQUIRE(position->frame == 375);
-	
+
 	uint8_t q[12];
 
 	// Track 2's physically stored pregap begins at physical frame 225.
@@ -2047,16 +2047,16 @@ TEST_CASE("CD-ROM Q TOC semantics update canonical disc model", "[util][cdrom]")
 
         REQUIRE(disc.sessions[0].lead_out.has_value());
 		REQUIRE(
-       			disc.sessions[0].lead_out->kind
-            		== cdrom_file::region_kind::lead_out);
+			disc.sessions[0].lead_out->kind
+				== cdrom_file::region_kind::lead_out);
 		REQUIRE(disc.sessions[0].lead_out->start.frame == 12345);
 		REQUIRE_FALSE(disc.sessions[0].lead_out->frames.has_value());
 		REQUIRE(
-      		  	disc.sessions[0].lead_out->main_data
-           			== cdrom_file::region_presence::unknown);
+			disc.sessions[0].lead_out->main_data
+				== cdrom_file::region_presence::unknown);
 		REQUIRE(
-       		 	disc.sessions[0].lead_out->subcode
-           		 	== cdrom_file::region_presence::unknown);
+			disc.sessions[0].lead_out->subcode
+				== cdrom_file::region_presence::unknown);
     }
 
     SECTION("track point updates INDEX 01")
@@ -2448,11 +2448,11 @@ TEST_CASE("CD-ROM Q TOC accumulator updates canonical disc model", "[util][cdrom
 		session.program_start = { 900 };
 		session.lead_in = std::nullopt;
 		session.lead_out = cdrom_file::region{
-        		cdrom_file::region_kind::lead_out,
-        		{ 4500 },
-        		750,
-        		cdrom_file::region_presence::generated,
-        		cdrom_file::region_presence::captured };
+			cdrom_file::region_kind::lead_out,
+			{ 4500 },
+			750,
+			cdrom_file::region_presence::generated,
+			cdrom_file::region_presence::captured };
 		disc.sessions.push_back(session);
 
 		cdrom_file::disc_track track3;
@@ -2541,11 +2541,11 @@ TEST_CASE("CD-ROM Q TOC accumulator updates canonical disc model", "[util][cdrom
 		REQUIRE(disc.sessions[0].lead_out->frames.has_value());
 		REQUIRE(*disc.sessions[0].lead_out->frames == 750);
 		REQUIRE(
-      			disc.sessions[0].lead_out->main_data
-            		== cdrom_file::region_presence::generated);
+			disc.sessions[0].lead_out->main_data
+				== cdrom_file::region_presence::generated);
 		REQUIRE(
-        		disc.sessions[0].lead_out->subcode
-         			== cdrom_file::region_presence::captured);
+			disc.sessions[0].lead_out->subcode
+				== cdrom_file::region_presence::captured);
 
 		REQUIRE(disc.tracks[0].indexes[0].start.frame == 1000);
 		REQUIRE(disc.tracks[0].regions[0].start.frame == 1000);

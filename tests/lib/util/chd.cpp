@@ -282,7 +282,7 @@ TEST_CASE("CD CHD reconstructs track indexes from stored Q", "[util][chd][cdrom]
 	// Wrong-track Q is rejected for semantic lookup, so this sector falls back
 	// to the reconstructed semantic table.
 	REQUIRE(cd.get_track_index(16) == 3);
-	
+
 	chd.close();
 	std::filesystem::remove_all(tempdir);
 }

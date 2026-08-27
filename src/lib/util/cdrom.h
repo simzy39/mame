@@ -94,17 +94,17 @@ public:
 		int64_t frame;
 		uint8_t byte_offset;
 	};
-	
+
 	struct subcode_position
 	{
 		int64_t frame;
 	};
-	
+
 	struct disc_position
 	{
 		int32_t frame;
 	};
-	
+
 	struct captured_position
 	{
 		std::optional<sector_position> sector_data;
@@ -313,7 +313,7 @@ public:
 	bool get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys=false) const;
 	bool get_subcode_raw(uint32_t lbasector, uint8_t *buffer, bool phys=false) const;
 
-	static q_type classify_subcode_q(const uint8_t *q);	
+	static q_type classify_subcode_q(const uint8_t *q);
 	static void encode_subcode_q(const q_position &position, uint8_t *buffer);
 	static bool decode_subcode_q(const uint8_t *q, q_position &position);
 	static bool decode_subcode_q_toc(const uint8_t *q, q_toc &toc);
@@ -331,9 +331,9 @@ public:
 			disc &disc,
 			uint8_t session_number);
 	static bool apply_q_toc_semantics(
-    	    const q_toc_semantics &semantics,
-        	disc &disc,
-        	uint8_t session_number);
+			const q_toc_semantics &semantics,
+			disc &disc,
+			uint8_t session_number);
 	static void pack_subcode_q(const uint8_t *q, uint8_t *subcode);
 	static void unpack_subcode_q(const uint8_t *subcode, uint8_t *q);
 	static bool make_subcode_q_position(

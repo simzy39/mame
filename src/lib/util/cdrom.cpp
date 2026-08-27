@@ -297,7 +297,7 @@ cdrom_file::cdrom_file(chd_file *_chd)
 		track.logframeofs = logofs;
 		track.chdframeofs = chdofs;
 		track.logframes = 0;
-		
+
 		m_disc = build_disc();
 		reconstruct_track_indexes();
 		m_disc = build_disc();
@@ -446,7 +446,7 @@ bool cdrom_file::read_data(uint32_t lbasector, void *buffer, uint32_t datatype, 
 			physical_to_chd_lba(
 					uint32_t(backing->frame),
 					tracknum);
-	
+
 	// copy out the requested sector
 	uint32_t tracktype = cdtoc.tracks[tracknum].trktype;
 
@@ -1307,7 +1307,7 @@ bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) c
 	}
 
 	encode_subcode_q(q, buffer);
-	
+
 	return true;
 }
 
@@ -1348,7 +1348,7 @@ bool cdrom_file::get_subcode_raw(uint32_t lbasector, uint8_t *buffer, bool phys)
 			canonical_region
 				&& canonical_region->kind == region_kind::pregap
 				&& canonical_region->subcode != region_presence::captured;
-	
+
 	// Preserve captured raw P-W subcode exactly as stored.
 		if (!uncaptured_pregap && track.subsize == 96)
 	{
@@ -1540,15 +1540,15 @@ cdrom_file::disc cdrom_file::build_disc() const
 		if (source.pgdatasize || source.pgsubsize)
 		{
 			captured_position captured;
-		
+
 			if (source.pgdatasize)
 				captured.sector_data =
 						sector_position{ int64_t(source.physframeofs) };
-		
+
 			if (source.pgsubsize)
 				captured.subcode =
 						subcode_position{ int64_t(source.physframeofs) };
-		
+
 			pregap.backing.push_back(
 		{
 			pregap.start,
@@ -1573,7 +1573,7 @@ cdrom_file::disc cdrom_file::build_disc() const
 				source.subsize
 					? region_presence::captured
 					: region_presence::unknown;
-		
+
 		captured_position captured;
 
 		const int64_t program_physical_frame =
@@ -1581,16 +1581,16 @@ cdrom_file::disc cdrom_file::build_disc() const
 					+ (source.pgdatasize
 							? int64_t(source.pregap)
 							: 0);
-		
+
 		captured.sector_data =
 				sector_position{ program_physical_frame };
-		
+
 		if (source.subsize)
 		{
 			captured.subcode =
 					subcode_position{ program_physical_frame };
 		}
-		
+
 		program.backing.push_back(
 		{
 			program.start,
@@ -2615,7 +2615,7 @@ std::error_condition cdrom_file::write_metadata(chd_file *chd, const toc &toc)
 		}
 
 		std::string metadata;
-		
+
 			if (toc.numsessions > 1 && sessionnum != toc.tracks[i].session)
 		{
 			metadata = util::string_format(CDROM_SESSION_METADATA_FORMAT, toc.tracks[i].session+1);
