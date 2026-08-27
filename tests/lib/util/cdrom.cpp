@@ -3153,6 +3153,58 @@ TEST_CASE("CD-ROM invalid stored Q falls back to semantic index", "[util][cdrom]
 	std::filesystem::remove_all(tempdir);
 }
 
+TEST_CASE("CD-ROM canonical lead-out Q generation", "[util][cdrom]")
+{
+	const std::filesystem::path tempdir =
+			std::filesystem::temp_directory_path() / "mame-cdrom-lead-out-q-test";
+	const std::filesystem::path binpath = tempdir / "track.bin";
+	const std::filesystem::path cuepath = tempdir / "disc.cue";
+
+	std::filesystem::remove_all(tempdir);
+	std::filesystem::create_directories(tempdir);
+
+	{
+		std::ofstream bin(binpath, std::ios::binary);
+		const std::vector<char> data(75 * 2352, 0);
+		bin.write(data.data(), data.size());
+	}
+
+	{
+		std::ofstream cue(cuepath);
+		cue <<
+				"FILE \"track.bin\" BINARY\n"
+				"  TRACK 01 AUDIO\n"
+				"    INDEX 01 00:00:00\n";
+	}
+
+	cdrom_file cd(cuepath.string());
+
+	REQUIRE(cd.get_track_start(0xaa) == 75);
+
+	uint8_t q[12];
+
+	REQUIRE(cd.get_subcode_q(75, q));
+	REQUIRE(cdrom_file::classify_subcode_q(q) == cdrom_file::q_type::lead_out);
+
+	REQUIRE(q[1] == 0xaa);
+	REQUIRE(q[2] == 0x01);
+
+	// First lead-out frame has relative time 00:00:00.
+	REQUIRE(q[3] == 0x00);
+	REQUIRE(q[4] == 0x00);
+	REQUIRE(q[5] == 0x00);
+
+	// Track 1 INDEX 01 is absolute 00:02:00, so frame 75 is 00:03:00.
+	REQUIRE(q[7] == 0x00);
+	REQUIRE(q[8] == 0x03);
+	REQUIRE(q[9] == 0x00);
+
+	REQUIRE((q[0] & 0x0f) == cdrom_file::CD_FLAG_ADR_START_TIME);
+	require_valid_q_crc(q);
+
+	std::filesystem::remove_all(tempdir);
+}
+
 TEST_CASE("CD-ROM Q position generation", "[util][cdrom]")
 {
 	cdrom_file::disc_track track;
