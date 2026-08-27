@@ -1399,6 +1399,46 @@ uint32_t cdrom_file::get_track(uint32_t frame) const
 	return track ? track->number - 1 : 0;
 }
 
+uint32_t cdrom_file::get_track_start(uint32_t track) const
+{
+	if (track == 0xaa)
+	{
+		if (!m_disc.sessions.empty())
+		{
+			const disc_session &session = m_disc.sessions.back();
+
+			if (session.lead_out.has_value()
+					&& session.lead_out->start.frame >= 0)
+			{
+				return uint32_t(session.lead_out->start.frame);
+			}
+		}
+
+		return cdtoc.tracks[cdtoc.numtrks].logframeofs;
+	}
+
+	if (track < m_disc.tracks.size())
+	{
+		const disc_track &canonical_track = m_disc.tracks[track];
+
+		const auto index01 = std::find_if(
+				canonical_track.indexes.begin(),
+				canonical_track.indexes.end(),
+				[](const index &entry)
+				{
+					return entry.number == 1;
+				});
+
+		if (index01 != canonical_track.indexes.end()
+				&& index01->start.frame >= 0)
+		{
+			return uint32_t(index01->start.frame);
+		}
+	}
+
+	return cdtoc.tracks[track].logframeofs;
+}
+
 uint16_t cdrom_file::subcode_q_crc(const uint8_t *data)
 {
 	return calculate_q_crc(data);
