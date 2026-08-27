@@ -3205,6 +3205,111 @@ TEST_CASE("CD-ROM canonical lead-out Q generation", "[util][cdrom]")
 	std::filesystem::remove_all(tempdir);
 }
 
+TEST_CASE("CD-ROM canonical lead-out Q boundaries", "[util][cdrom]")
+{
+	cdrom_file::disc_track track;
+	track.number = 1;
+	track.session = 1;
+	track.type = cdrom_file::CD_TRACK_AUDIO;
+	track.control_flags = 0;
+
+	cdrom_file::region lead_out;
+	lead_out.kind = cdrom_file::region_kind::lead_out;
+	lead_out.start = { 4500 };
+	lead_out.frames = 750;
+	lead_out.main_data = cdrom_file::region_presence::unknown;
+	lead_out.subcode = cdrom_file::region_presence::unknown;
+
+	uint8_t q[12];
+
+	SECTION("first lead-out frame")
+	{
+		REQUIRE(cdrom_file::make_subcode_q_lead_out(
+				track,
+				lead_out,
+				{ 4500 },
+				4650,
+				q));
+
+		REQUIRE(q[1] == 0xaa);
+		REQUIRE(q[2] == 0x01);
+
+		REQUIRE(q[3] == 0x00);
+		REQUIRE(q[4] == 0x00);
+		REQUIRE(q[5] == 0x00);
+
+		require_valid_q_crc(q);
+	}
+
+	SECTION("later lead-out frame")
+	{
+		REQUIRE(cdrom_file::make_subcode_q_lead_out(
+				track,
+				lead_out,
+				{ 4575 },
+				4725,
+				q));
+
+		REQUIRE(q[1] == 0xaa);
+		REQUIRE(q[2] == 0x01);
+
+		REQUIRE(q[3] == 0x00);
+		REQUIRE(q[4] == 0x01);
+		REQUIRE(q[5] == 0x00);
+
+		require_valid_q_crc(q);
+	}
+
+	SECTION("last finite lead-out frame")
+	{
+		REQUIRE(cdrom_file::make_subcode_q_lead_out(
+				track,
+				lead_out,
+				{ 5249 },
+				5399,
+				q));
+
+		REQUIRE(q[1] == 0xaa);
+		REQUIRE(q[2] == 0x01);
+
+		REQUIRE(q[3] == 0x00);
+		REQUIRE(q[4] == 0x09);
+		REQUIRE(q[5] == 0x74);
+
+		require_valid_q_crc(q);
+	}
+
+	SECTION("rejects position before lead-out")
+	{
+		REQUIRE_FALSE(cdrom_file::make_subcode_q_lead_out(
+				track,
+				lead_out,
+				{ 4499 },
+				4649,
+				q));
+	}
+
+	SECTION("rejects position after finite lead-out")
+	{
+		REQUIRE_FALSE(cdrom_file::make_subcode_q_lead_out(
+				track,
+				lead_out,
+				{ 5250 },
+				5400,
+				q));
+	}
+
+	SECTION("rejects negative absolute time")
+	{
+		REQUIRE_FALSE(cdrom_file::make_subcode_q_lead_out(
+				track,
+				lead_out,
+				{ 4500 },
+				-1,
+				q));
+	}
+}
+
 TEST_CASE("CD-ROM Q position generation", "[util][cdrom]")
 {
 	cdrom_file::disc_track track;
