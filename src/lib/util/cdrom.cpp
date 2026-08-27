@@ -265,6 +265,46 @@ std::error_condition cdrom_file::validate_cdm1_metadata(
 	return std::error_condition();
 }
 
+std::error_condition cdrom_file::parse_cdm1_directory(
+		const std::vector<uint8_t> &metadata,
+		std::vector<cdm1_section_descriptor> &sections)
+{
+	const std::error_condition err = validate_cdm1_metadata(metadata);
+	if (err)
+		return err;
+
+	const uint8_t *const data = metadata.data();
+
+	const uint32_t section_count =
+			get_u32be(data + CDM1_HEADER_SECTION_COUNT_OFFSET);
+	const uint32_t directory_offset =
+			get_u32be(data + CDM1_HEADER_DIRECTORY_OFFSET);
+
+	std::vector<cdm1_section_descriptor> parsed;
+	parsed.reserve(section_count);
+
+	for (uint32_t i = 0; i < section_count; i++)
+	{
+		const uint8_t *const entry =
+				data
+				+ directory_offset
+				+ uint64_t(i) * CDM1_SECTION_ENTRY_BYTES;
+
+		parsed.push_back(
+				{
+					get_u32be(entry + CDM1_SECTION_TYPE_OFFSET),
+					get_u16be(entry + CDM1_SECTION_VERSION_OFFSET),
+					get_u16be(entry + CDM1_SECTION_FLAGS_OFFSET),
+					get_u32be(entry + CDM1_SECTION_OFFSET_OFFSET),
+					get_u32be(entry + CDM1_SECTION_LENGTH_OFFSET),
+					get_u32be(entry + CDM1_SECTION_COUNT_OFFSET)
+				});
+	}
+
+	sections = std::move(parsed);
+	return std::error_condition();
+}
+
 /*-------------------------------------------------
     physical_to_chd_lba - translate a physical
 	track position to its CHD LBA
