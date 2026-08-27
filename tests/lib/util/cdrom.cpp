@@ -2812,27 +2812,46 @@ TEST_CASE("CD-ROM invalid stored Q falls back to semantic index", "[util][cdrom]
 
 TEST_CASE("CD-ROM Q position generation", "[util][cdrom]")
 {
-	cdrom_file::toc toc{};
-	toc.numtrks = 1;
-
-	cdrom_file::track_info &track = toc.tracks[0];
-	track.trktype = cdrom_file::CD_TRACK_AUDIO;
+	cdrom_file::disc_track track;
+	track.number = 1;
+	track.session = 1;
+	track.type = cdrom_file::CD_TRACK_AUDIO;
 	track.control_flags = 0;
 
-	std::fill(std::begin(track.idx), std::end(track.idx), -1);
+	track.regions.push_back(
+			{
+				cdrom_file::region_kind::pregap,
+				{ 0 },
+				150,
+				cdrom_file::region_presence::unknown,
+				cdrom_file::region_presence::unknown,
+				{}
+			});
 
-	// Deliberately skip INDEX 02.  Additional indexes do not need to be
+	track.regions.push_back(
+			{
+				cdrom_file::region_kind::program,
+				{ 150 },
+				600,
+				cdrom_file::region_presence::captured,
+				cdrom_file::region_presence::unknown,
+				{}
+			});
+
+	track.indexes.push_back({ 1, { 150 } });
+
+	// Deliberately skip INDEX 02. Additional indexes do not need to be
 	// numerically contiguous.
-	track.idx[3] = 225;
-	track.idx[5] = 450;
+	track.indexes.push_back({ 3, { 375 } });
+	track.indexes.push_back({ 5, { 600 } });
 
 	cdrom_file::q_position position;
 
 	SECTION("pregap position")
 	{
 		REQUIRE(cdrom_file::make_subcode_q_position(
-				toc,
-				0,
+				track,
+				{ 0 },
 				-150,
 				0,
 				position));
@@ -2846,8 +2865,8 @@ TEST_CASE("CD-ROM Q position generation", "[util][cdrom]")
 	SECTION("index 1")
 	{
 		REQUIRE(cdrom_file::make_subcode_q_position(
-				toc,
-				0,
+				track,
+				{ 374 },
 				224,
 				374,
 				position));
@@ -2861,8 +2880,8 @@ TEST_CASE("CD-ROM Q position generation", "[util][cdrom]")
 	SECTION("skipped index 3")
 	{
 		REQUIRE(cdrom_file::make_subcode_q_position(
-				toc,
-				0,
+				track,
+				{ 375 },
 				225,
 				375,
 				position));
@@ -2876,8 +2895,8 @@ TEST_CASE("CD-ROM Q position generation", "[util][cdrom]")
 	SECTION("index 5")
 	{
 		REQUIRE(cdrom_file::make_subcode_q_position(
-				toc,
-				0,
+				track,
+				{ 600 },
 				450,
 				600,
 				position));
@@ -2888,21 +2907,11 @@ TEST_CASE("CD-ROM Q position generation", "[util][cdrom]")
 		REQUIRE(position.absolute_frame == 600);
 	}
 
-	SECTION("invalid track")
-	{
-		REQUIRE_FALSE(cdrom_file::make_subcode_q_position(
-				toc,
-				1,
-				0,
-				150,
-				position));
-	}
-
 	SECTION("negative absolute position")
 	{
 		REQUIRE_FALSE(cdrom_file::make_subcode_q_position(
-				toc,
-				0,
+				track,
+				{ 150 },
 				0,
 				-1,
 				position));
