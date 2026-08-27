@@ -337,11 +337,11 @@ public:
 	static void pack_subcode_q(const uint8_t *q, uint8_t *subcode);
 	static void unpack_subcode_q(const uint8_t *subcode, uint8_t *q);
 	static bool make_subcode_q_position(
-			const toc &toc,
-			uint32_t tracknum,
+			const disc_track &track,
+			disc_position position,
 			int64_t track_frame,
 			int64_t absolute_frame,
-			q_position &position);
+			q_position &q);
 
 	/* handy utilities */
 	uint32_t get_track(uint32_t frame) const;
