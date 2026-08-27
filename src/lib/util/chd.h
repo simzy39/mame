@@ -233,6 +233,9 @@ constexpr chd_metadata_tag GDROM_OLD_METADATA_TAG = CHD_MAKE_TAG('C','H','G','T'
 constexpr chd_metadata_tag GDROM_TRACK_METADATA_TAG = CHD_MAKE_TAG('C', 'H', 'G', 'D');
 extern const char *GDROM_TRACK_METADATA_FORMAT;
 
+// canonical CD-ROM disc model metadata
+constexpr chd_metadata_tag CDROM_DISC_MODEL_METADATA_TAG = CHD_MAKE_TAG('C','D','M','1');
+
 // standard DVD metafata
 constexpr chd_metadata_tag DVD_METADATA_TAG = CHD_MAKE_TAG('D', 'V', 'D', ' ');
 
