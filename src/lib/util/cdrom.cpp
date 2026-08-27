@@ -1264,6 +1264,59 @@ bool cdrom_file::apply_q_toc_semantics(
 }
 
 bool cdrom_file::make_subcode_q_position(
+		const disc &disc,
+		disc_position position,
+		q_position &q)
+{
+	const disc_track *const track =
+			find_track(disc, position);
+
+	if (!track || disc.tracks.empty())
+		return false;
+
+	const auto index01 = std::find_if(
+			track->indexes.begin(),
+			track->indexes.end(),
+			[](const index &entry)
+			{
+				return entry.number == 1;
+			});
+
+	if (index01 == track->indexes.end())
+		return false;
+
+	const disc_track &first_track = disc.tracks.front();
+
+	const auto first_index01 = std::find_if(
+			first_track.indexes.begin(),
+			first_track.indexes.end(),
+			[](const index &entry)
+			{
+				return entry.number == 1;
+			});
+
+	if (first_index01 == first_track.indexes.end())
+		return false;
+
+	const int64_t track_frame =
+			int64_t(position.frame)
+				- int64_t(index01->start.frame);
+
+	// Track 1 INDEX 01 corresponds to absolute 00:02:00.
+	const int64_t absolute_frame =
+			int64_t(position.frame)
+				+ 150
+				- int64_t(first_index01->start.frame);
+
+	return make_subcode_q_position(
+			*track,
+			position,
+			track_frame,
+			absolute_frame,
+			q);
+}
+
+bool cdrom_file::make_subcode_q_position(
 		const disc_track &track,
 		disc_position position,
 		int64_t track_frame,
