@@ -380,6 +380,9 @@ public:
 	static std::optional<sector_position> backing_sector_position(
 			const disc &disc,
 			disc_position position);
+	static std::optional<disc_position> disc_position_from_sector_position(
+			const disc &disc,
+			sector_position position);
 	static std::optional<channel_position> backing_channel_position(
 			const disc &disc,
 			disc_position position);
