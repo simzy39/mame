@@ -1550,52 +1550,10 @@ bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) c
 		if (!uncaptured_pregap && track.subsize != 0)
 		return false;
 
-	const auto index01 = std::find_if(
-			canonical_track->indexes.begin(),
-			canonical_track->indexes.end(),
-			[](const index &entry)
-			{
-				return entry.number == 1;
-			});
+		q_position q;
 
-	if (index01 == canonical_track->indexes.end())
+	if (!make_subcode_q_position(m_disc, discpos, q))
 		return false;
-
-	const int64_t logical_frame = int64_t(discpos.frame);
-	const int64_t track_frame =
-			logical_frame - int64_t(index01->start.frame);
-
-		if (m_disc.tracks.empty())
-		return false;
-
-	const disc_track &first_track = m_disc.tracks.front();
-
-	const auto first_index01 = std::find_if(
-			first_track.indexes.begin(),
-			first_track.indexes.end(),
-			[](const index &entry)
-			{
-				return entry.number == 1;
-			});
-
-	if (first_index01 == first_track.indexes.end())
-		return false;
-
-	// Track 1 INDEX 01 corresponds to absolute 00:02:00.
-	const int64_t absolute_frame =
-			logical_frame + 150 - int64_t(first_index01->start.frame);
-
-	q_position q;
-
-	if (!make_subcode_q_position(
-			*canonical_track,
-			discpos,
-			track_frame,
-			absolute_frame,
-			q))
-	{
-		return false;
-	}
 
 	encode_subcode_q(q, buffer);
 
