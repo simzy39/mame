@@ -1279,8 +1279,7 @@ bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) c
 		q_position q;
 
 	const disc_position discpos{ int32_t(logical_frame) };
-	const disc_track *const canonical_track =
-			find_track(m_disc, discpos);
+	canonical_track = find_track(m_disc, discpos);
 
 	if (!canonical_track)
 		return false;
