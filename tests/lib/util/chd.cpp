@@ -115,7 +115,19 @@ TEST_CASE("CD CHD canonical disc model reconstructs sessions", "[util][chd][cdro
 	REQUIRE(disc.sessions[1].last_track == 4);
 	REQUIRE(disc.sessions[1].program_start.frame == 8);
 	REQUIRE_FALSE(disc.sessions[1].lead_in.has_value());
-	REQUIRE_FALSE(disc.sessions[1].lead_out.has_value());
+	REQUIRE(disc.sessions[1].lead_out.has_value());
+	REQUIRE(
+			disc.sessions[1].lead_out->kind
+				== cdrom_file::region_kind::lead_out);
+	REQUIRE(disc.sessions[1].lead_out->start.frame == 16);
+	REQUIRE_FALSE(disc.sessions[1].lead_out->frames.has_value());
+	REQUIRE(
+			disc.sessions[1].lead_out->main_data
+				== cdrom_file::region_presence::unknown);
+	REQUIRE(
+			disc.sessions[1].lead_out->subcode
+				== cdrom_file::region_presence::unknown);
+	REQUIRE(disc.sessions[1].lead_out->backing.empty());
 
 	std::filesystem::remove_all(tempdir);
 }
