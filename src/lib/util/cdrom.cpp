@@ -1316,6 +1316,65 @@ bool cdrom_file::make_subcode_q_position(
 	return true;
 }
 
+bool cdrom_file::make_subcode_q_lead_out(
+		const disc_track &track,
+		const region &lead_out,
+		disc_position position,
+		int64_t absolute_frame,
+		uint8_t *q)
+{
+	if (lead_out.kind != region_kind::lead_out
+			|| position.frame < lead_out.start.frame
+			|| absolute_frame < 0)
+	{
+		return false;
+	}
+
+	if (lead_out.frames.has_value()
+			&& int64_t(position.frame)
+				>= int64_t(lead_out.start.frame)
+					+ int64_t(*lead_out.frames))
+	{
+		return false;
+	}
+
+	const int64_t relative_frame =
+			int64_t(position.frame)
+				- int64_t(lead_out.start.frame);
+
+	if (relative_frame < 0)
+		return false;
+
+	const uint32_t relmsf = lba_to_msf(uint32_t(relative_frame));
+	const uint32_t absmsf = lba_to_msf(uint32_t(absolute_frame));
+
+	uint8_t control = track.control_flags & 0x0f;
+
+	if (track.type != CD_TRACK_AUDIO)
+		control |= CD_FLAG_CONTROL_DATA_TRACK;
+
+	// Lead-out Mode-1 Q uses TNO=AA and INDEX=01.
+	q[0] = (control << 4) | CD_FLAG_ADR_START_TIME;
+	q[1] = 0xaa;
+	q[2] = 0x01;
+
+	q[3] = (relmsf >> 16) & 0xff;
+	q[4] = (relmsf >> 8) & 0xff;
+	q[5] = relmsf & 0xff;
+
+	q[6] = 0;
+
+	q[7] = (absmsf >> 16) & 0xff;
+	q[8] = (absmsf >> 8) & 0xff;
+	q[9] = absmsf & 0xff;
+
+	const uint16_t crc = calculate_q_crc(q);
+	q[10] = crc >> 8;
+	q[11] = crc;
+
+	return true;
+}
+
 bool cdrom_file::get_subcode_q(uint32_t lbasector, uint8_t *buffer, bool phys) const
 {
 	disc_position discpos;
