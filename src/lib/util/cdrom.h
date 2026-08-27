@@ -345,7 +345,7 @@ public:
 
 	/* handy utilities */
 	uint32_t get_track(uint32_t frame) const;
-	uint32_t get_track_start(uint32_t track) const {return cdtoc.tracks[track == 0xaa ? cdtoc.numtrks : track].logframeofs; }
+	uint32_t get_track_start(uint32_t track) const;
 	uint32_t get_track_start_phys(uint32_t track) const { return cdtoc.tracks[track == 0xaa ? cdtoc.numtrks : track].physframeofs; }
 	uint32_t get_track_index(uint32_t frame) const;
 
