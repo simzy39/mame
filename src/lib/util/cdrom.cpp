@@ -296,6 +296,71 @@ std::error_condition validate_cdm1_track_records(
 	return std::error_condition();
 }
 
+std::error_condition validate_cdm1_index_records(
+		const uint8_t *data,
+		uint32_t directory_offset)
+{
+	const uint8_t *const index_entry =
+			data
+				+ directory_offset
+				+ 3 * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
+
+	const uint32_t section_offset =
+			get_u32be(
+					index_entry
+						+ CDM1_SECTION_OFFSET_OFFSET);
+	const uint32_t record_count =
+			get_u32be(
+					index_entry
+						+ CDM1_SECTION_COUNT_OFFSET);
+
+	const uint8_t *const records =
+			data
+				+ section_offset
+				+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+	for (uint32_t i = 0; i < record_count; i++)
+	{
+		const uint8_t *const record =
+				records
+					+ uint64_t(i)
+						* cdrom_file::CDM1_INDEX_RECORD_BYTES;
+
+		const uint32_t id = get_u32be(record + 0);
+		const uint32_t track_id = get_u32be(record + 4);
+		const uint16_t number = get_u16be(record + 8);
+		const uint16_t semantic_source = get_u16be(record + 10);
+		const uint32_t flags = get_u32be(record + 12);
+
+		if (id == 0
+				|| track_id == 0
+				|| number > cdrom_file::MAX_INDEX
+				|| semantic_source
+					> uint16_t(cdrom_file::cdm1_semantic_source::derived_capture)
+				|| flags != 0)
+		{
+			return chd_file::error::INVALID_DATA;
+		}
+
+		for (uint32_t previous = 0; previous < i; previous++)
+		{
+			const uint8_t *const previous_record =
+					records
+						+ uint64_t(previous)
+							* cdrom_file::CDM1_INDEX_RECORD_BYTES;
+
+			if (get_u32be(previous_record + 0) == id
+					|| (get_u32be(previous_record + 4) == track_id
+						&& get_u16be(previous_record + 8) == number))
+			{
+				return chd_file::error::INVALID_DATA;
+			}
+		}
+	}
+
+	return std::error_condition();
+}
+
 } // anonymous namespace
 
 /***************************************************************************
@@ -496,13 +561,21 @@ std::error_condition cdrom_file::validate_cdm1_metadata(
 	if (session_err)
 		return session_err;
 
-	const std::error_condition track_err =
+		const std::error_condition track_err =
 			validate_cdm1_track_records(
 					data,
 					directory_offset);
 
 	if (track_err)
 		return track_err;
+
+	const std::error_condition index_err =
+			validate_cdm1_index_records(
+					data,
+					directory_offset);
+
+	if (index_err)
+		return index_err;
 
 	return std::error_condition();
 }
