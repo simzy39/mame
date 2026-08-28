@@ -3647,7 +3647,7 @@ static void cdm1_test_put_u32be(
 
 static std::vector<uint8_t> make_valid_cdm1_test_metadata()
 {
-	constexpr uint32_t section_count = 7;
+	constexpr uint32_t section_count = 8;
 	constexpr uint32_t directory_offset =
 			cdrom_file::CDM1_HEADER_BYTES;
 	constexpr uint32_t directory_bytes =
@@ -3663,6 +3663,7 @@ static std::vector<uint8_t> make_valid_cdm1_test_metadata()
 		cdrom_file::cdm1_section::indexes,
 		cdrom_file::cdm1_section::regions,
 		cdrom_file::cdm1_section::evidence,
+		cdrom_file::cdm1_section::storage,
 		cdrom_file::cdm1_section::mappings
 	};
 
@@ -3674,12 +3675,13 @@ static std::vector<uint8_t> make_valid_cdm1_test_metadata()
 		cdrom_file::CDM1_INDEX_RECORD_BYTES,
 		cdrom_file::CDM1_REGION_RECORD_BYTES,
 		cdrom_file::CDM1_EVIDENCE_RECORD_BYTES,
+		cdrom_file::CDM1_STORAGE_RECORD_BYTES,
 		cdrom_file::CDM1_MAPPING_RECORD_BYTES
 	};
 
 	constexpr std::array<uint32_t, section_count> record_counts =
 	{
-		1, 2, 3, 4, 5, 6, 7
+		1, 2, 3, 4, 5, 6, 7, 8
 	};
 
 	uint32_t total_bytes = first_section_offset;
@@ -3735,20 +3737,35 @@ static std::vector<uint8_t> make_valid_cdm1_test_metadata()
 		section_offset += section_length;
 	}
 
-		const uint32_t disc_record_offset =
+	const uint32_t disc_record_offset =
 			first_section_offset
 				+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
 
 	cdm1_test_put_u32be(metadata, disc_record_offset + 0, 1);
+	cdm1_test_put_u32be(metadata, disc_record_offset + 4, 0);
 
-	for (uint32_t i = 1; i < section_count; i++)
+	const uint32_t session_section_offset =
+			first_section_offset
+				+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+				+ cdrom_file::CDM1_DISC_RECORD_BYTES;
+
+	const uint32_t session_records_offset =
+			session_section_offset
+				+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+	for (uint32_t i = 0; i < record_counts[1]; i++)
 	{
-		cdm1_test_put_u32be(
-				metadata,
-				disc_record_offset + 4 * (i + 1),
-				record_counts[i]);
+		const uint32_t record =
+				session_records_offset
+					+ i * cdrom_file::CDM1_SESSION_RECORD_BYTES;
+
+		cdm1_test_put_u32be(metadata, record + 0, i + 1);
+		cdm1_test_put_u16be(metadata, record + 4, uint16_t(i + 1));
+		cdm1_test_put_u16be(metadata, record + 6, 0);
+		cdm1_test_put_u32be(metadata, record + 8, i + 1);
+		cdm1_test_put_u32be(metadata, record + 12, i + 1);
 	}
-	
+
 	return metadata;
 }
 
