@@ -3694,9 +3694,9 @@ static std::vector<uint8_t> make_valid_cdm1_test_metadata()
 		cdrom_file::CDM1_MAPPING_RECORD_BYTES
 	};
 
-	constexpr std::array<uint32_t, section_count> record_counts =
+		constexpr std::array<uint32_t, section_count> record_counts =
 	{
-		1, 2, 3, 4, 5, 6, 7, 8
+		1, 2, 3, 4, 5, 2, 2, 5
 	};
 
 	uint32_t total_bytes = first_section_offset;
@@ -3976,10 +3976,57 @@ static std::vector<uint8_t> make_valid_cdm1_test_metadata()
 				metadata,
 				record + 14,
 				uint16_t(cdrom_file::cdm1_region_flag::length_known));
-		cdm1_test_put_u64be(metadata, record + 16, 4000);
+				cdm1_test_put_u64be(metadata, record + 16, 4000);
 		cdm1_test_put_u64be(metadata, record + 24, 150);
 	}
-	
+
+	const uint32_t evidence_section_offset =
+			region_section_offset
+				+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+				+ record_counts[4] * cdrom_file::CDM1_REGION_RECORD_BYTES;
+
+	const uint32_t evidence_records_offset =
+			evidence_section_offset
+				+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+	// Decoded main-channel frames.
+	{
+		const uint32_t record = evidence_records_offset;
+
+		cdm1_test_put_u32be(metadata, record + 0, 1);
+		cdm1_test_put_u32be(metadata, record + 4, 0);
+		cdm1_test_put_u16be(
+				metadata,
+				record + 8,
+				uint16_t(cdrom_file::cdm1_evidence_class::decoded_main));
+		cdm1_test_put_u16be(
+				metadata,
+				record + 10,
+				uint16_t(cdrom_file::cdm1_coordinate_class::decoded_frame));
+		cdm1_test_put_u32be(metadata, record + 12, 2352 * 8);
+		cdm1_test_put_u64be(metadata, record + 16, 4000);
+	}
+
+	// Captured raw P-W subcode frames.
+	{
+		const uint32_t record =
+				evidence_records_offset
+					+ cdrom_file::CDM1_EVIDENCE_RECORD_BYTES;
+
+		cdm1_test_put_u32be(metadata, record + 0, 2);
+		cdm1_test_put_u32be(metadata, record + 4, 0);
+		cdm1_test_put_u16be(
+				metadata,
+				record + 8,
+				uint16_t(cdrom_file::cdm1_evidence_class::raw_pw));
+		cdm1_test_put_u16be(
+				metadata,
+				record + 10,
+				uint16_t(cdrom_file::cdm1_coordinate_class::subcode_frame));
+		cdm1_test_put_u32be(metadata, record + 12, 96 * 8);
+		cdm1_test_put_u64be(metadata, record + 16, 4000);
+	}
+
 	return metadata;
 }
 
