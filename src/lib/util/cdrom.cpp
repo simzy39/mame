@@ -438,6 +438,70 @@ std::error_condition validate_cdm1_region_records(
 	return std::error_condition();
 }
 
+std::error_condition validate_cdm1_evidence_records(
+		const uint8_t *data,
+		uint32_t directory_offset)
+{
+	const uint8_t *const evidence_entry =
+			data
+				+ directory_offset
+				+ 5 * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
+
+	const uint32_t section_offset =
+			get_u32be(
+					evidence_entry
+						+ CDM1_SECTION_OFFSET_OFFSET);
+	const uint32_t record_count =
+			get_u32be(
+					evidence_entry
+						+ CDM1_SECTION_COUNT_OFFSET);
+
+	const uint8_t *const records =
+			data
+				+ section_offset
+				+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+	for (uint32_t i = 0; i < record_count; i++)
+	{
+		const uint8_t *const record =
+				records
+					+ uint64_t(i)
+						* cdrom_file::CDM1_EVIDENCE_RECORD_BYTES;
+
+		const uint32_t id = get_u32be(record + 0);
+		const uint32_t flags = get_u32be(record + 4);
+		const uint16_t evidence_class = get_u16be(record + 8);
+		const uint16_t coordinate_class = get_u16be(record + 10);
+
+		if (id == 0
+				|| flags != 0
+				|| evidence_class
+					< uint16_t(cdrom_file::cdm1_evidence_class::decoded_main)
+				|| evidence_class
+					> uint16_t(cdrom_file::cdm1_evidence_class::servo)
+				|| coordinate_class
+					< uint16_t(cdrom_file::cdm1_coordinate_class::decoded_frame)
+				|| coordinate_class
+					> uint16_t(cdrom_file::cdm1_coordinate_class::time_tick))
+		{
+			return chd_file::error::INVALID_DATA;
+		}
+
+		for (uint32_t previous = 0; previous < i; previous++)
+		{
+			const uint8_t *const previous_record =
+					records
+						+ uint64_t(previous)
+							* cdrom_file::CDM1_EVIDENCE_RECORD_BYTES;
+
+			if (get_u32be(previous_record + 0) == id)
+				return chd_file::error::INVALID_DATA;
+		}
+	}
+
+	return std::error_condition();
+}
+
 } // anonymous namespace
 
 /***************************************************************************
@@ -654,13 +718,21 @@ std::error_condition cdrom_file::validate_cdm1_metadata(
 	if (index_err)
 		return index_err;
 
-	const std::error_condition region_err =
+		const std::error_condition region_err =
 			validate_cdm1_region_records(
 					data,
 					directory_offset);
 
 	if (region_err)
 		return region_err;
+
+	const std::error_condition evidence_err =
+			validate_cdm1_evidence_records(
+					data,
+					directory_offset);
+
+	if (evidence_err)
+		return evidence_err;
 
 	return std::error_condition();
 }
