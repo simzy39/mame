@@ -6281,6 +6281,106 @@ TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 				cdrom_file::validate_cdm1_metadata(metadata)
 					== chd_file::error::INVALID_DATA);
 	}
+
+		SECTION("MAPS storage source is not allowed")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t mapping_record_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_DISC_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 2 * cdrom_file::CDM1_SESSION_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 3 * cdrom_file::CDM1_TRACK_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 4 * cdrom_file::CDM1_INDEX_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 5 * cdrom_file::CDM1_REGION_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 2 * cdrom_file::CDM1_EVIDENCE_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 2 * cdrom_file::CDM1_STORAGE_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+		cdm1_test_put_u16be(
+				metadata,
+				mapping_record_offset + 16,
+				uint16_t(cdrom_file::cdm1_mapping_object::storage));
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+	SECTION("MAPS region target is not allowed")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t mapping_record_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_DISC_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 2 * cdrom_file::CDM1_SESSION_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 3 * cdrom_file::CDM1_TRACK_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 4 * cdrom_file::CDM1_INDEX_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 5 * cdrom_file::CDM1_REGION_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 2 * cdrom_file::CDM1_EVIDENCE_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 2 * cdrom_file::CDM1_STORAGE_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+		cdm1_test_put_u16be(
+				metadata,
+				mapping_record_offset + 18,
+				uint16_t(cdrom_file::cdm1_mapping_object::region));
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+	SECTION("MAPS region to storage is not allowed")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t mapping_record_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_DISC_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 2 * cdrom_file::CDM1_SESSION_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 3 * cdrom_file::CDM1_TRACK_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 4 * cdrom_file::CDM1_INDEX_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 5 * cdrom_file::CDM1_REGION_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 2 * cdrom_file::CDM1_EVIDENCE_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 2 * cdrom_file::CDM1_STORAGE_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+		cdm1_test_put_u32be(metadata, mapping_record_offset + 8, 1);
+		cdm1_test_put_u16be(
+				metadata,
+				mapping_record_offset + 18,
+				uint16_t(cdrom_file::cdm1_mapping_object::storage));
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
 }
 
 TEST_CASE("CD-ROM CDM1 section directory decoding", "[util][cdrom]")
