@@ -139,6 +139,48 @@ std::error_condition validate_cdm1_table_header(
 	return std::error_condition();
 }
 
+std::error_condition validate_cdm1_disc_record(
+		const uint8_t *data,
+		uint32_t directory_offset)
+{
+	const uint8_t *const disc_entry =
+			data + directory_offset;
+
+	const uint32_t disc_section_offset =
+			get_u32be(
+					disc_entry
+						+ CDM1_SECTION_OFFSET_OFFSET);
+
+	const uint8_t *const record =
+			data
+				+ disc_section_offset
+				+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+	if (get_u32be(record + 0) != 1
+			|| get_u32be(record + 4) != 0)
+	{
+		return chd_file::error::INVALID_DATA;
+	}
+
+	for (uint32_t i = 1; i < CDM1_REQUIRED_SECTIONS.size(); i++)
+	{
+		const uint8_t *const entry =
+				data
+					+ directory_offset
+					+ uint64_t(i) * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
+
+		const uint32_t disc_count =
+				get_u32be(record + 4 * (i + 1));
+		const uint32_t section_count =
+				get_u32be(entry + CDM1_SECTION_COUNT_OFFSET);
+
+		if (disc_count != section_count)
+			return chd_file::error::INVALID_DATA;
+	}
+
+	return std::error_condition();
+}
+
 } // anonymous namespace
 
 /***************************************************************************
@@ -322,6 +364,14 @@ std::error_condition cdrom_file::validate_cdm1_metadata(
 			}
 		}
 	}
+
+		const std::error_condition disc_err =
+			validate_cdm1_disc_record(
+					data,
+					directory_offset);
+
+	if (disc_err)
+		return disc_err;
 
 	return std::error_condition();
 }
