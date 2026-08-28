@@ -4091,7 +4091,7 @@ static std::vector<uint8_t> make_valid_cdm1_test_metadata()
 					uint32_t target_id,
 					cdrom_file::cdm1_mapping_object source_kind,
 					cdrom_file::cdm1_mapping_object target_kind,
-					cdrom_file::cdm1_mapping_provenance provenance,
+					cdrom_file::cdm1_provenance provenance,
 					uint64_t source_offset,
 					uint64_t source_length,
 					uint64_t target_offset,
@@ -4122,42 +4122,42 @@ static std::vector<uint8_t> make_valid_cdm1_test_metadata()
 			0, 1, 1, 1,
 			cdrom_file::cdm1_mapping_object::region,
 			cdrom_file::cdm1_mapping_object::evidence,
-			cdrom_file::cdm1_mapping_provenance::captured,
+			cdrom_file::cdm1_provenance::captured,
 			0, 1000, 0, 1000);
 
 	put_mapping(
 			1, 2, 2, 1,
 			cdrom_file::cdm1_mapping_object::region,
 			cdrom_file::cdm1_mapping_object::evidence,
-			cdrom_file::cdm1_mapping_provenance::captured,
+			cdrom_file::cdm1_provenance::captured,
 			0, 1000, 1000, 1000);
 
 	put_mapping(
 			2, 3, 3, 1,
 			cdrom_file::cdm1_mapping_object::region,
 			cdrom_file::cdm1_mapping_object::evidence,
-			cdrom_file::cdm1_mapping_provenance::captured,
+			cdrom_file::cdm1_provenance::captured,
 			0, 1000, 2000, 1000);
 
 	put_mapping(
 			3, 4, 4, 1,
 			cdrom_file::cdm1_mapping_object::region,
 			cdrom_file::cdm1_mapping_object::evidence,
-			cdrom_file::cdm1_mapping_provenance::captured,
+			cdrom_file::cdm1_provenance::captured,
 			0, 1000, 3000, 1000);
 
 	put_mapping(
 			4, 5, 1, 1,
 			cdrom_file::cdm1_mapping_object::evidence,
 			cdrom_file::cdm1_mapping_object::storage,
-			cdrom_file::cdm1_mapping_provenance::captured,
+			cdrom_file::cdm1_provenance::captured,
 			0, 4000, 0, uint64_t(4000) * 2352);
 
 	put_mapping(
 			5, 6, 2, 2,
 			cdrom_file::cdm1_mapping_object::evidence,
 			cdrom_file::cdm1_mapping_object::storage,
-			cdrom_file::cdm1_mapping_provenance::captured,
+			cdrom_file::cdm1_provenance::captured,
 			0, 4000, 0, uint64_t(4000) * 96);
 	
 	return metadata;
@@ -5802,6 +5802,266 @@ TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 
 		cdm1_test_put_u64be(metadata, mapping_record_offset + 40, UINT64_MAX);
 		cdm1_test_put_u64be(metadata, mapping_record_offset + 48, 1);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+	SECTION("TRAK session reference must resolve")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t track_record_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_DISC_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 2 * cdrom_file::CDM1_SESSION_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+		cdm1_test_put_u32be(metadata, track_record_offset + 4, 999);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+	SECTION("INDX track reference must resolve")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t index_record_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_DISC_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 2 * cdrom_file::CDM1_SESSION_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 3 * cdrom_file::CDM1_TRACK_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+		cdm1_test_put_u32be(metadata, index_record_offset + 4, 999);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+	SECTION("REGN track owner reference must resolve")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t region_record_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_DISC_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 2 * cdrom_file::CDM1_SESSION_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 3 * cdrom_file::CDM1_TRACK_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 4 * cdrom_file::CDM1_INDEX_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+		cdm1_test_put_u32be(metadata, region_record_offset + 4, 999);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+	SECTION("REGN session owner reference must resolve")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t region_record_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_DISC_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 2 * cdrom_file::CDM1_SESSION_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 3 * cdrom_file::CDM1_TRACK_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 4 * cdrom_file::CDM1_INDEX_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 4 * cdrom_file::CDM1_REGION_RECORD_BYTES;
+
+		cdm1_test_put_u32be(metadata, region_record_offset + 4, 999);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+	SECTION("SESS first track reference must resolve")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t session_record_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_DISC_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+		cdm1_test_put_u32be(metadata, session_record_offset + 8, 999);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+	SECTION("SESS last track reference must resolve")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t session_record_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_DISC_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+		cdm1_test_put_u32be(metadata, session_record_offset + 12, 999);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+	SECTION("SESS first track must belong to session")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t session_record_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_DISC_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+		cdm1_test_put_u32be(metadata, session_record_offset + 8, 3);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+	SECTION("SESS last track must belong to session")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t session_record_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_DISC_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+		cdm1_test_put_u32be(metadata, session_record_offset + 12, 3);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+	SECTION("SESS lead-in region reference must resolve")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t session_record_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_DISC_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_SESSION_RECORD_BYTES;
+
+		cdm1_test_put_u32be(metadata, session_record_offset + 24, 999);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+	SECTION("SESS lead-in reference must identify lead-in")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t session_record_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_DISC_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_SESSION_RECORD_BYTES;
+
+		// Region 5 belongs to session 2, but is a lead-out.
+		cdm1_test_put_u32be(metadata, session_record_offset + 24, 5);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+	SECTION("SESS lead-out region reference must resolve")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t session_record_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_DISC_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_SESSION_RECORD_BYTES;
+
+		cdm1_test_put_u32be(metadata, session_record_offset + 28, 999);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+	SECTION("SESS lead-out reference must identify lead-out")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t session_record_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_DISC_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_SESSION_RECORD_BYTES;
+
+		const uint32_t region_record_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_DISC_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 2 * cdrom_file::CDM1_SESSION_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 3 * cdrom_file::CDM1_TRACK_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 4 * cdrom_file::CDM1_INDEX_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 4 * cdrom_file::CDM1_REGION_RECORD_BYTES;
+
+		// Region 5 remains session-owned, but make it a lead-in.
+		cdm1_test_put_u16be(
+				metadata,
+				region_record_offset + 10,
+				uint16_t(cdrom_file::cdm1_region_kind::lead_in));
+
+		cdm1_test_put_u32be(metadata, session_record_offset + 28, 5);
 
 		REQUIRE(
 				cdrom_file::validate_cdm1_metadata(metadata)
