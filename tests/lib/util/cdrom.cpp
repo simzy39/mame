@@ -3735,6 +3735,20 @@ static std::vector<uint8_t> make_valid_cdm1_test_metadata()
 		section_offset += section_length;
 	}
 
+		const uint32_t disc_record_offset =
+			first_section_offset
+				+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+	cdm1_test_put_u32be(metadata, disc_record_offset + 0, 1);
+
+	for (uint32_t i = 1; i < section_count; i++)
+	{
+		cdm1_test_put_u32be(
+				metadata,
+				disc_record_offset + 4 * (i + 1),
+				record_counts[i]);
+	}
+	
 	return metadata;
 }
 
@@ -4028,14 +4042,14 @@ TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 		cdm1_test_put_u32be(
 				metadata,
 				first_entry + 12,
-				valid_length + 1);
+				valid_length - 8);
 
 		REQUIRE(
 				cdrom_file::validate_cdm1_metadata(metadata)
 					== chd_file::error::INVALID_DATA);
 	}
 
-	SECTION("DISC must contain exactly one record")
+		SECTION("DISC must contain exactly one record")
 	{
 		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
 
@@ -4045,8 +4059,60 @@ TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 				cdrom_file::CDM1_HEADER_BYTES
 					+ 7 * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
 
-		cdm1_test_put_u32be(metadata, first_entry + 16, 2);
-		cdm1_test_put_u32be(metadata, first_section_offset + 4, 2);
+		cdm1_test_put_u32be(
+				metadata,
+				first_entry + 12,
+				cdrom_file::CDM1_TABLE_HEADER_BYTES);
+		cdm1_test_put_u32be(metadata, first_entry + 16, 0);
+		cdm1_test_put_u32be(metadata, first_section_offset + 4, 0);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+		SECTION("DISC id must be one")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t disc_record_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 7 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+		cdm1_test_put_u32be(metadata, disc_record_offset + 0, 2);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+	SECTION("DISC flags must be zero")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t disc_record_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 7 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+		cdm1_test_put_u32be(metadata, disc_record_offset + 4, 1);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+	SECTION("DISC counts must match section counts")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t disc_record_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 7 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+		cdm1_test_put_u32be(metadata, disc_record_offset + 12, 99);
 
 		REQUIRE(
 				cdrom_file::validate_cdm1_metadata(metadata)
