@@ -70,7 +70,7 @@ constexpr uint32_t CDM1_SECTION_LENGTH_OFFSET = 12;
 constexpr uint32_t CDM1_SECTION_COUNT_OFFSET = 16;
 constexpr uint32_t CDM1_SECTION_RESERVED_OFFSET = 20;
 
-constexpr std::array<cdrom_file::cdm1_section, 7> CDM1_REQUIRED_SECTIONS =
+constexpr std::array<cdrom_file::cdm1_section, 8> CDM1_REQUIRED_SECTIONS =
 {
 	cdrom_file::cdm1_section::disc,
 	cdrom_file::cdm1_section::sessions,
@@ -78,10 +78,11 @@ constexpr std::array<cdrom_file::cdm1_section, 7> CDM1_REQUIRED_SECTIONS =
 	cdrom_file::cdm1_section::indexes,
 	cdrom_file::cdm1_section::regions,
 	cdrom_file::cdm1_section::evidence,
+	cdrom_file::cdm1_section::storage,
 	cdrom_file::cdm1_section::mappings
 };
 
-constexpr std::array<uint32_t, 7> CDM1_REQUIRED_RECORD_SIZES =
+constexpr std::array<uint32_t, 8> CDM1_REQUIRED_RECORD_SIZES =
 {
 	cdrom_file::CDM1_DISC_RECORD_BYTES,
 	cdrom_file::CDM1_SESSION_RECORD_BYTES,
@@ -89,6 +90,7 @@ constexpr std::array<uint32_t, 7> CDM1_REQUIRED_RECORD_SIZES =
 	cdrom_file::CDM1_INDEX_RECORD_BYTES,
 	cdrom_file::CDM1_REGION_RECORD_BYTES,
 	cdrom_file::CDM1_EVIDENCE_RECORD_BYTES,
+	cdrom_file::CDM1_STORAGE_RECORD_BYTES,
 	cdrom_file::CDM1_MAPPING_RECORD_BYTES
 };
 
@@ -156,27 +158,11 @@ std::error_condition validate_cdm1_disc_record(
 				+ disc_section_offset
 				+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
 
-	if (get_u32be(record + 0) != 1
-			|| get_u32be(record + 4) != 0)
-	{
+	const uint32_t id = get_u32be(record + 0);
+	const uint32_t flags = get_u32be(record + 4);
+
+	if (id != 1 || flags != 0)
 		return chd_file::error::INVALID_DATA;
-	}
-
-	for (uint32_t i = 1; i < CDM1_REQUIRED_SECTIONS.size(); i++)
-	{
-		const uint8_t *const entry =
-				data
-					+ directory_offset
-					+ uint64_t(i) * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
-
-		const uint32_t disc_count =
-				get_u32be(record + 4 * (i + 1));
-		const uint32_t section_count =
-				get_u32be(entry + CDM1_SECTION_COUNT_OFFSET);
-
-		if (disc_count != section_count)
-			return chd_file::error::INVALID_DATA;
-	}
 
 	return std::error_condition();
 }
