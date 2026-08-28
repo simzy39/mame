@@ -3766,6 +3766,32 @@ static std::vector<uint8_t> make_valid_cdm1_test_metadata()
 		cdm1_test_put_u32be(metadata, record + 12, i + 1);
 	}
 
+		const uint32_t track_section_offset =
+			session_section_offset
+				+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+				+ record_counts[1] * cdrom_file::CDM1_SESSION_RECORD_BYTES;
+
+	const uint32_t track_records_offset =
+			track_section_offset
+				+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+	for (uint32_t i = 0; i < record_counts[2]; i++)
+	{
+		const uint32_t record =
+				track_records_offset
+					+ i * cdrom_file::CDM1_TRACK_RECORD_BYTES;
+
+		cdm1_test_put_u32be(metadata, record + 0, i + 1);
+		cdm1_test_put_u32be(metadata, record + 4, (i < 2) ? 1 : 2);
+		cdm1_test_put_u16be(metadata, record + 8, uint16_t((i < 2) ? i + 1 : 1));
+		cdm1_test_put_u16be(
+				metadata,
+				record + 10,
+				uint16_t(cdrom_file::cdm1_track_type::audio));
+		cdm1_test_put_u16be(metadata, record + 12, 0);
+		cdm1_test_put_u16be(metadata, record + 14, 0);
+	}
+	
 	return metadata;
 }
 
