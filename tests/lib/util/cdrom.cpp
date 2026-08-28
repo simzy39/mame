@@ -3645,6 +3645,21 @@ static void cdm1_test_put_u32be(
 	data[offset + 3] = uint8_t(value);
 }
 
+static void cdm1_test_put_u64be(
+		std::vector<uint8_t> &data,
+		size_t offset,
+		uint64_t value)
+{
+	data[offset + 0] = uint8_t(value >> 56);
+	data[offset + 1] = uint8_t(value >> 48);
+	data[offset + 2] = uint8_t(value >> 40);
+	data[offset + 3] = uint8_t(value >> 32);
+	data[offset + 4] = uint8_t(value >> 24);
+	data[offset + 5] = uint8_t(value >> 16);
+	data[offset + 6] = uint8_t(value >> 8);
+	data[offset + 7] = uint8_t(value);
+}
+
 static std::vector<uint8_t> make_valid_cdm1_test_metadata()
 {
 	constexpr uint32_t section_count = 8;
@@ -3762,8 +3777,8 @@ static std::vector<uint8_t> make_valid_cdm1_test_metadata()
 		cdm1_test_put_u32be(metadata, record + 0, i + 1);
 		cdm1_test_put_u16be(metadata, record + 4, uint16_t(i + 1));
 		cdm1_test_put_u16be(metadata, record + 6, 0);
-		cdm1_test_put_u32be(metadata, record + 8, i + 1);
-		cdm1_test_put_u32be(metadata, record + 12, i + 1);
+		cdm1_test_put_u32be(metadata, record + 8, (i == 0) ? 1 : 3);
+		cdm1_test_put_u32be(metadata, record + 12, (i == 0) ? 2 : 3);
 	}
 
 		const uint32_t track_section_offset =
@@ -3816,6 +3831,153 @@ static std::vector<uint8_t> make_valid_cdm1_test_metadata()
 				uint16_t(cdrom_file::cdm1_semantic_source::explicit_fallback));
 		cdm1_test_put_u32be(metadata, record + 12, 0);
 		cdm1_test_put_u64be(metadata, record + 16, uint64_t(i) * 1000);
+	}
+
+			const uint32_t region_section_offset =
+			index_section_offset
+				+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+				+ record_counts[3] * cdrom_file::CDM1_INDEX_RECORD_BYTES;
+
+	const uint32_t region_records_offset =
+			region_section_offset
+				+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+	// Track 1 pregap.
+	{
+		const uint32_t record = region_records_offset;
+
+		cdm1_test_put_u32be(metadata, record + 0, 1);
+		cdm1_test_put_u32be(metadata, record + 4, 1);
+		cdm1_test_put_u16be(
+				metadata,
+				record + 8,
+				uint16_t(cdrom_file::cdm1_region_owner::track));
+		cdm1_test_put_u16be(
+				metadata,
+				record + 10,
+				uint16_t(cdrom_file::cdm1_region_kind::pregap));
+		cdm1_test_put_u16be(
+				metadata,
+				record + 12,
+				uint16_t(cdrom_file::cdm1_semantic_source::explicit_fallback));
+		cdm1_test_put_u16be(
+				metadata,
+				record + 14,
+				uint16_t(cdrom_file::cdm1_region_flag::length_known));
+		cdm1_test_put_u64be(metadata, record + 16, 0);
+		cdm1_test_put_u64be(metadata, record + 24, 1000);
+	}
+
+	// Track 1 program.
+	{
+		const uint32_t record =
+				region_records_offset
+					+ cdrom_file::CDM1_REGION_RECORD_BYTES;
+
+		cdm1_test_put_u32be(metadata, record + 0, 2);
+		cdm1_test_put_u32be(metadata, record + 4, 1);
+		cdm1_test_put_u16be(
+				metadata,
+				record + 8,
+				uint16_t(cdrom_file::cdm1_region_owner::track));
+		cdm1_test_put_u16be(
+				metadata,
+				record + 10,
+				uint16_t(cdrom_file::cdm1_region_kind::program));
+		cdm1_test_put_u16be(
+				metadata,
+				record + 12,
+				uint16_t(cdrom_file::cdm1_semantic_source::explicit_fallback));
+		cdm1_test_put_u16be(
+				metadata,
+				record + 14,
+				uint16_t(cdrom_file::cdm1_region_flag::length_known));
+		cdm1_test_put_u64be(metadata, record + 16, 1000);
+		cdm1_test_put_u64be(metadata, record + 24, 1000);
+	}
+
+	// Track 2 program.
+	{
+		const uint32_t record =
+				region_records_offset
+					+ 2 * cdrom_file::CDM1_REGION_RECORD_BYTES;
+
+		cdm1_test_put_u32be(metadata, record + 0, 3);
+		cdm1_test_put_u32be(metadata, record + 4, 2);
+		cdm1_test_put_u16be(
+				metadata,
+				record + 8,
+				uint16_t(cdrom_file::cdm1_region_owner::track));
+		cdm1_test_put_u16be(
+				metadata,
+				record + 10,
+				uint16_t(cdrom_file::cdm1_region_kind::program));
+		cdm1_test_put_u16be(
+				metadata,
+				record + 12,
+				uint16_t(cdrom_file::cdm1_semantic_source::explicit_fallback));
+		cdm1_test_put_u16be(
+				metadata,
+				record + 14,
+				uint16_t(cdrom_file::cdm1_region_flag::length_known));
+		cdm1_test_put_u64be(metadata, record + 16, 2000);
+		cdm1_test_put_u64be(metadata, record + 24, 1000);
+	}
+
+	// Track 3 program.
+	{
+		const uint32_t record =
+				region_records_offset
+					+ 3 * cdrom_file::CDM1_REGION_RECORD_BYTES;
+
+		cdm1_test_put_u32be(metadata, record + 0, 4);
+		cdm1_test_put_u32be(metadata, record + 4, 3);
+		cdm1_test_put_u16be(
+				metadata,
+				record + 8,
+				uint16_t(cdrom_file::cdm1_region_owner::track));
+		cdm1_test_put_u16be(
+				metadata,
+				record + 10,
+				uint16_t(cdrom_file::cdm1_region_kind::program));
+		cdm1_test_put_u16be(
+				metadata,
+				record + 12,
+				uint16_t(cdrom_file::cdm1_semantic_source::explicit_fallback));
+		cdm1_test_put_u16be(
+				metadata,
+				record + 14,
+				uint16_t(cdrom_file::cdm1_region_flag::length_known));
+		cdm1_test_put_u64be(metadata, record + 16, 3000);
+		cdm1_test_put_u64be(metadata, record + 24, 1000);
+	}
+
+	// Session 2 lead-out.
+	{
+		const uint32_t record =
+				region_records_offset
+					+ 4 * cdrom_file::CDM1_REGION_RECORD_BYTES;
+
+		cdm1_test_put_u32be(metadata, record + 0, 5);
+		cdm1_test_put_u32be(metadata, record + 4, 2);
+		cdm1_test_put_u16be(
+				metadata,
+				record + 8,
+				uint16_t(cdrom_file::cdm1_region_owner::session));
+		cdm1_test_put_u16be(
+				metadata,
+				record + 10,
+				uint16_t(cdrom_file::cdm1_region_kind::lead_out));
+		cdm1_test_put_u16be(
+				metadata,
+				record + 12,
+				uint16_t(cdrom_file::cdm1_semantic_source::explicit_fallback));
+		cdm1_test_put_u16be(
+				metadata,
+				record + 14,
+				uint16_t(cdrom_file::cdm1_region_flag::length_known));
+		cdm1_test_put_u64be(metadata, record + 16, 4000);
+		cdm1_test_put_u64be(metadata, record + 24, 150);
 	}
 	
 	return metadata;
