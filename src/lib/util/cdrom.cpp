@@ -181,6 +181,69 @@ std::error_condition validate_cdm1_disc_record(
 	return std::error_condition();
 }
 
+std::error_condition validate_cdm1_session_records(
+		const uint8_t *data,
+		uint32_t directory_offset)
+{
+	const uint8_t *const session_entry =
+			data
+				+ directory_offset
+				+ cdrom_file::CDM1_SECTION_ENTRY_BYTES;
+
+	const uint32_t section_offset =
+			get_u32be(
+					session_entry
+						+ CDM1_SECTION_OFFSET_OFFSET);
+	const uint32_t record_count =
+			get_u32be(
+					session_entry
+						+ CDM1_SECTION_COUNT_OFFSET);
+
+	const uint8_t *const records =
+			data
+				+ section_offset
+				+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+	for (uint32_t i = 0; i < record_count; i++)
+	{
+		const uint8_t *const record =
+				records
+					+ uint64_t(i)
+						* cdrom_file::CDM1_SESSION_RECORD_BYTES;
+
+		const uint32_t id = get_u32be(record + 0);
+		const uint16_t number = get_u16be(record + 4);
+		const uint16_t flags = get_u16be(record + 6);
+		const uint32_t first_track_id = get_u32be(record + 8);
+		const uint32_t last_track_id = get_u32be(record + 12);
+
+		if (id == 0
+				|| number == 0
+				|| flags != 0
+				|| first_track_id == 0
+				|| last_track_id == 0)
+		{
+			return chd_file::error::INVALID_DATA;
+		}
+
+		for (uint32_t previous = 0; previous < i; previous++)
+		{
+			const uint8_t *const previous_record =
+					records
+						+ uint64_t(previous)
+							* cdrom_file::CDM1_SESSION_RECORD_BYTES;
+
+			if (get_u32be(previous_record + 0) == id
+					|| get_u16be(previous_record + 4) == number)
+			{
+				return chd_file::error::INVALID_DATA;
+			}
+		}
+	}
+
+	return std::error_condition();
+}
+
 } // anonymous namespace
 
 /***************************************************************************
@@ -372,6 +435,14 @@ std::error_condition cdrom_file::validate_cdm1_metadata(
 
 	if (disc_err)
 		return disc_err;
+
+	const std::error_condition session_err =
+			validate_cdm1_session_records(
+					data,
+					directory_offset);
+
+	if (session_err)
+		return session_err;
 
 	return std::error_condition();
 }
