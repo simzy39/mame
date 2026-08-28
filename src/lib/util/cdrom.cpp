@@ -81,6 +81,17 @@ constexpr std::array<cdrom_file::cdm1_section, 7> CDM1_REQUIRED_SECTIONS =
 	cdrom_file::cdm1_section::mappings
 };
 
+constexpr std::array<uint32_t, 7> CDM1_REQUIRED_RECORD_SIZES =
+{
+	cdrom_file::CDM1_DISC_RECORD_BYTES,
+	cdrom_file::CDM1_SESSION_RECORD_BYTES,
+	cdrom_file::CDM1_TRACK_RECORD_BYTES,
+	cdrom_file::CDM1_INDEX_RECORD_BYTES,
+	cdrom_file::CDM1_REGION_RECORD_BYTES,
+	cdrom_file::CDM1_EVIDENCE_RECORD_BYTES,
+	cdrom_file::CDM1_MAPPING_RECORD_BYTES
+};
+
 bool ranges_overlap(
 		uint32_t start1,
 		uint32_t length1,
@@ -91,6 +102,45 @@ bool ranges_overlap(
 	const uint64_t end2 = uint64_t(start2) + length2;
 
 	return uint64_t(start1) < end2 && uint64_t(start2) < end1;
+}
+
+std::error_condition validate_cdm1_table_header(
+		const uint8_t *data,
+		uint32_t offset,
+		uint32_t length,
+		uint32_t directory_count,
+		uint32_t expected_record_size,
+		bool require_single_record)
+{
+	if (length < cdrom_file::CDM1_TABLE_HEADER_BYTES)
+		return chd_file::error::INVALID_DATA;
+
+	const uint8_t *const table = data + offset;
+
+	const uint32_t record_size = get_u32be(table + 0);
+	const uint32_t record_count = get_u32be(table + 4);
+	const uint32_t flags = get_u32be(table + 8);
+	const uint32_t reserved = get_u32be(table + 12);
+
+	if (record_size != expected_record_size
+			|| record_count != directory_count
+			|| flags != 0
+			|| reserved != 0)
+	{
+		return chd_file::error::INVALID_DATA;
+	}
+
+	const uint64_t expected_length =
+			uint64_t(cdrom_file::CDM1_TABLE_HEADER_BYTES)
+				+ uint64_t(record_count) * uint64_t(record_size);
+
+	if (expected_length != length)
+		return chd_file::error::INVALID_DATA;
+
+	if (require_single_record && record_count != 1)
+		return chd_file::error::INVALID_DATA;
+
+	return std::error_condition();
 }
 
 } // anonymous namespace
@@ -185,10 +235,12 @@ std::error_condition cdrom_file::validate_cdm1_metadata(
 				get_u16be(entry + CDM1_SECTION_VERSION_OFFSET);
 		const uint16_t flags =
 				get_u16be(entry + CDM1_SECTION_FLAGS_OFFSET);
-		const uint32_t offset =
+				const uint32_t offset =
 				get_u32be(entry + CDM1_SECTION_OFFSET_OFFSET);
 		const uint32_t length =
 				get_u32be(entry + CDM1_SECTION_LENGTH_OFFSET);
+		const uint32_t count =
+				get_u32be(entry + CDM1_SECTION_COUNT_OFFSET);
 
 		if (flags & ~uint16_t(cdm1_section_flag::required))
 			return chd_file::error::INVALID_DATA;
@@ -212,17 +264,28 @@ std::error_condition cdrom_file::validate_cdm1_metadata(
 			return chd_file::error::INVALID_DATA;
 		}
 
-		if (i < CDM1_REQUIRED_SECTIONS.size())
+				if (i < CDM1_REQUIRED_SECTIONS.size())
 		{
 			if (type != uint32_t(CDM1_REQUIRED_SECTIONS[i])
 					|| version != 1
-					|| !(flags & uint16_t(cdm1_section_flag::required))
-					|| length == 0)
+					|| !(flags & uint16_t(cdm1_section_flag::required)))
 			{
 				return chd_file::error::INVALID_DATA;
 			}
+
+			const std::error_condition table_err =
+					validate_cdm1_table_header(
+							data,
+							offset,
+							length,
+							count,
+							CDM1_REQUIRED_RECORD_SIZES[i],
+							i == 0);
+
+			if (table_err)
+				return table_err;
 		}
-			else if (flags & uint16_t(cdm1_section_flag::required))
+		else if (flags & uint16_t(cdm1_section_flag::required))
 		{
 			return chd_file::error::UNSUPPORTED_FORMAT;
 		}
