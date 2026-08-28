@@ -3791,6 +3791,32 @@ static std::vector<uint8_t> make_valid_cdm1_test_metadata()
 		cdm1_test_put_u16be(metadata, record + 12, 0);
 		cdm1_test_put_u16be(metadata, record + 14, 0);
 	}
+
+		const uint32_t index_section_offset =
+			track_section_offset
+				+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+				+ record_counts[2] * cdrom_file::CDM1_TRACK_RECORD_BYTES;
+
+	const uint32_t index_records_offset =
+			index_section_offset
+				+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+	for (uint32_t i = 0; i < record_counts[3]; i++)
+	{
+		const uint32_t record =
+				index_records_offset
+					+ i * cdrom_file::CDM1_INDEX_RECORD_BYTES;
+
+		cdm1_test_put_u32be(metadata, record + 0, i + 1);
+		cdm1_test_put_u32be(metadata, record + 4, (i < 2) ? 1 : i);
+		cdm1_test_put_u16be(metadata, record + 8, uint16_t((i == 0) ? 0 : 1));
+		cdm1_test_put_u16be(
+				metadata,
+				record + 10,
+				uint16_t(cdrom_file::cdm1_semantic_source::explicit_fallback));
+		cdm1_test_put_u32be(metadata, record + 12, 0);
+		cdm1_test_put_u64be(metadata, record + 16, uint64_t(i) * 1000);
+	}
 	
 	return metadata;
 }
