@@ -502,6 +502,68 @@ std::error_condition validate_cdm1_evidence_records(
 	return std::error_condition();
 }
 
+std::error_condition validate_cdm1_storage_records(
+		const uint8_t *data,
+		uint32_t directory_offset)
+{
+	const uint8_t *const storage_entry =
+			data
+				+ directory_offset
+				+ 6 * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
+
+	const uint32_t section_offset =
+			get_u32be(
+					storage_entry
+						+ CDM1_SECTION_OFFSET_OFFSET);
+	const uint32_t record_count =
+			get_u32be(
+					storage_entry
+						+ CDM1_SECTION_COUNT_OFFSET);
+
+	const uint8_t *const records =
+			data
+				+ section_offset
+				+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+	for (uint32_t i = 0; i < record_count; i++)
+	{
+		const uint8_t *const record =
+				records
+					+ uint64_t(i)
+						* cdrom_file::CDM1_STORAGE_RECORD_BYTES;
+
+		const uint32_t id = get_u32be(record + 0);
+		const uint32_t flags = get_u32be(record + 4);
+		const uint16_t storage_class = get_u16be(record + 8);
+		const uint16_t encoding = get_u16be(record + 10);
+		const uint32_t unit_bytes = get_u32be(record + 12);
+
+		if (id == 0
+				|| flags != 0
+				|| storage_class
+					!= uint16_t(cdrom_file::cdm1_storage_class::chdv5_logical)
+				|| encoding
+					!= uint16_t(cdrom_file::cdm1_storage_encoding::raw)
+				|| unit_bytes == 0)
+		{
+			return chd_file::error::INVALID_DATA;
+		}
+
+		for (uint32_t previous = 0; previous < i; previous++)
+		{
+			const uint8_t *const previous_record =
+					records
+						+ uint64_t(previous)
+							* cdrom_file::CDM1_STORAGE_RECORD_BYTES;
+
+			if (get_u32be(previous_record + 0) == id)
+				return chd_file::error::INVALID_DATA;
+		}
+	}
+
+	return std::error_condition();
+}
+
 } // anonymous namespace
 
 /***************************************************************************
@@ -731,8 +793,16 @@ std::error_condition cdrom_file::validate_cdm1_metadata(
 					data,
 					directory_offset);
 
-	if (evidence_err)
+		if (evidence_err)
 		return evidence_err;
+
+	const std::error_condition storage_err =
+			validate_cdm1_storage_records(
+					data,
+					directory_offset);
+
+	if (storage_err)
+		return storage_err;
 
 	return std::error_condition();
 }
