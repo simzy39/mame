@@ -109,8 +109,7 @@ std::error_condition validate_cdm1_table_header(
 		uint32_t offset,
 		uint32_t length,
 		uint32_t directory_count,
-		uint32_t expected_record_size,
-		bool require_single_record)
+		uint32_t expected_record_size)
 {
 	if (length < cdrom_file::CDM1_TABLE_HEADER_BYTES)
 		return chd_file::error::INVALID_DATA;
@@ -135,9 +134,6 @@ std::error_condition validate_cdm1_table_header(
 				+ uint64_t(record_count) * uint64_t(record_size);
 
 	if (expected_length != length)
-		return chd_file::error::INVALID_DATA;
-
-	if (require_single_record && record_count != 1)
 		return chd_file::error::INVALID_DATA;
 
 	return std::error_condition();
@@ -273,17 +269,19 @@ std::error_condition cdrom_file::validate_cdm1_metadata(
 				return chd_file::error::INVALID_DATA;
 			}
 
-			const std::error_condition table_err =
+						const std::error_condition table_err =
 					validate_cdm1_table_header(
 							data,
 							offset,
 							length,
 							count,
-							CDM1_REQUIRED_RECORD_SIZES[i],
-							i == 0);
+							CDM1_REQUIRED_RECORD_SIZES[i]);
 
 			if (table_err)
 				return table_err;
+
+			if (i == 0 && count != 1)
+				return chd_file::error::INVALID_DATA;
 		}
 		else if (flags & uint16_t(cdm1_section_flag::required))
 		{
