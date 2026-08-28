@@ -3896,3 +3896,139 @@ TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 					== chd_file::error::INVALID_DATA);
 	}
 }
+
+TEST_CASE("CD-ROM CDM1 section directory decoding", "[util][cdrom]")
+{
+	auto put_u16be = [] (std::vector<uint8_t> &data, size_t offset, uint16_t value)
+	{
+		data[offset + 0] = uint8_t(value >> 8);
+		data[offset + 1] = uint8_t(value);
+	};
+
+	auto put_u32be = [] (std::vector<uint8_t> &data, size_t offset, uint32_t value)
+	{
+		data[offset + 0] = uint8_t(value >> 24);
+		data[offset + 1] = uint8_t(value >> 16);
+		data[offset + 2] = uint8_t(value >> 8);
+		data[offset + 3] = uint8_t(value);
+	};
+
+	auto make_valid_metadata = [&] ()
+	{
+		constexpr uint32_t section_count = 7;
+		constexpr uint32_t directory_offset =
+				cdrom_file::CDM1_HEADER_BYTES;
+		constexpr uint32_t directory_bytes =
+				section_count * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
+		constexpr uint32_t first_section_offset =
+				directory_offset + directory_bytes;
+		constexpr uint32_t section_length = 8;
+		constexpr uint32_t total_bytes =
+				first_section_offset + section_count * section_length;
+
+		std::vector<uint8_t> metadata(total_bytes, 0);
+
+		put_u32be(metadata, 0, cdrom_file::CDM1_MAGIC);
+		put_u16be(metadata, 4, cdrom_file::CDM1_VERSION_MAJOR);
+		put_u16be(metadata, 6, cdrom_file::CDM1_VERSION_MINOR);
+		put_u32be(metadata, 8, cdrom_file::CDM1_HEADER_BYTES);
+		put_u32be(metadata, 12, total_bytes);
+		put_u32be(metadata, 16, section_count);
+		put_u32be(metadata, 20, directory_offset);
+
+		const std::array<cdrom_file::cdm1_section, section_count> sections =
+		{
+			cdrom_file::cdm1_section::disc,
+			cdrom_file::cdm1_section::sessions,
+			cdrom_file::cdm1_section::tracks,
+			cdrom_file::cdm1_section::indexes,
+			cdrom_file::cdm1_section::regions,
+			cdrom_file::cdm1_section::evidence,
+			cdrom_file::cdm1_section::mappings
+		};
+
+		for (uint32_t i = 0; i < section_count; i++)
+		{
+			const uint32_t entry =
+					directory_offset
+						+ i * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
+
+			put_u32be(metadata, entry + 0, uint32_t(sections[i]));
+			put_u16be(metadata, entry + 4, 1);
+			put_u16be(
+					metadata,
+					entry + 6,
+					uint16_t(cdrom_file::cdm1_section_flag::required));
+			put_u32be(
+					metadata,
+					entry + 8,
+					first_section_offset + i * section_length);
+			put_u32be(metadata, entry + 12, section_length);
+			put_u32be(metadata, entry + 16, i + 1);
+			put_u32be(metadata, entry + 20, 0);
+		}
+
+		return metadata;
+	};
+
+	SECTION("decodes canonical directory")
+	{
+		const std::vector<uint8_t> metadata = make_valid_metadata();
+
+		std::vector<cdrom_file::cdm1_section_descriptor> sections;
+		REQUIRE_FALSE(
+				cdrom_file::parse_cdm1_directory(metadata, sections));
+
+		REQUIRE(sections.size() == 7);
+
+		const std::array<cdrom_file::cdm1_section, 7> expected_types =
+		{
+			cdrom_file::cdm1_section::disc,
+			cdrom_file::cdm1_section::sessions,
+			cdrom_file::cdm1_section::tracks,
+			cdrom_file::cdm1_section::indexes,
+			cdrom_file::cdm1_section::regions,
+			cdrom_file::cdm1_section::evidence,
+			cdrom_file::cdm1_section::mappings
+		};
+
+		const uint32_t first_section_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 7 * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
+
+		for (uint32_t i = 0; i < sections.size(); i++)
+		{
+			REQUIRE(sections[i].type == uint32_t(expected_types[i]));
+			REQUIRE(sections[i].version == 1);
+			REQUIRE(
+					sections[i].flags
+						== uint16_t(cdrom_file::cdm1_section_flag::required));
+			REQUIRE(sections[i].offset == first_section_offset + i * 8);
+			REQUIRE(sections[i].length == 8);
+			REQUIRE(sections[i].count == i + 1);
+		}
+	}
+
+	SECTION("failed parse leaves output unchanged")
+	{
+		std::vector<uint8_t> metadata = make_valid_metadata();
+		metadata[0] ^= 0x01;
+
+		std::vector<cdrom_file::cdm1_section_descriptor> sections =
+		{
+			{ 0x54455354, 7, 3, 123, 456, 789 }
+		};
+
+		REQUIRE(
+				cdrom_file::parse_cdm1_directory(metadata, sections)
+					== chd_file::error::INVALID_DATA);
+
+		REQUIRE(sections.size() == 1);
+		REQUIRE(sections[0].type == 0x54455354);
+		REQUIRE(sections[0].version == 7);
+		REQUIRE(sections[0].flags == 3);
+		REQUIRE(sections[0].offset == 123);
+		REQUIRE(sections[0].length == 456);
+		REQUIRE(sections[0].count == 789);
+	}
+}
