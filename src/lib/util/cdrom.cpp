@@ -1019,6 +1019,24 @@ std::error_condition validate_cdm1_mapping_references(
 		const uint32_t target_id = get_u32be(record + 8);
 		const uint16_t source_kind = get_u16be(record + 16);
 		const uint16_t target_kind = get_u16be(record + 18);
+		
+		const bool valid_relationship =
+				(source_kind
+						== uint16_t(cdrom_file::cdm1_mapping_object::region)
+					&& target_kind
+						== uint16_t(cdrom_file::cdm1_mapping_object::evidence))
+				|| (source_kind
+						== uint16_t(cdrom_file::cdm1_mapping_object::evidence)
+					&& target_kind
+						== uint16_t(cdrom_file::cdm1_mapping_object::storage))
+				|| (source_kind
+						== uint16_t(cdrom_file::cdm1_mapping_object::evidence)
+					&& target_kind
+						== uint16_t(cdrom_file::cdm1_mapping_object::evidence));
+
+		if (!valid_relationship)
+			return chd_file::error::INVALID_DATA;
+		
 		const uint64_t source_offset = get_u64be(record + 24);
 		const uint64_t source_length = get_u64be(record + 32);
 		const uint64_t target_offset = get_u64be(record + 40);
