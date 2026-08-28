@@ -849,6 +849,199 @@ std::error_condition validate_cdm1_core_references(
 	return std::error_condition();
 }
 
+std::error_condition validate_cdm1_mapping_references(
+		const uint8_t *data,
+		uint32_t directory_offset)
+{
+	auto get_records =
+			[data, directory_offset](uint32_t section_index)
+			{
+				const uint8_t *const entry =
+						data
+							+ directory_offset
+							+ uint64_t(section_index)
+								* cdrom_file::CDM1_SECTION_ENTRY_BYTES;
+
+				const uint32_t section_offset =
+						get_u32be(
+								entry
+									+ CDM1_SECTION_OFFSET_OFFSET);
+
+				return data
+						+ section_offset
+						+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+			};
+
+	auto get_count =
+			[data, directory_offset](uint32_t section_index)
+			{
+				const uint8_t *const entry =
+						data
+							+ directory_offset
+							+ uint64_t(section_index)
+								* cdrom_file::CDM1_SECTION_ENTRY_BYTES;
+
+				return get_u32be(
+						entry
+							+ CDM1_SECTION_COUNT_OFFSET);
+			};
+
+	const uint8_t *const regions = get_records(4);
+	const uint8_t *const evidence = get_records(5);
+	const uint8_t *const storage = get_records(6);
+	const uint8_t *const mappings = get_records(7);
+
+	const uint32_t region_count = get_count(4);
+	const uint32_t evidence_count = get_count(5);
+	const uint32_t storage_count = get_count(6);
+	const uint32_t mapping_count = get_count(7);
+
+	auto find_region =
+			[regions, region_count](uint32_t id) -> const uint8_t *
+			{
+				for (uint32_t i = 0; i < region_count; i++)
+				{
+					const uint8_t *const record =
+							regions
+								+ uint64_t(i)
+									* cdrom_file::CDM1_REGION_RECORD_BYTES;
+
+					if (get_u32be(record + 0) == id)
+						return record;
+				}
+
+				return nullptr;
+			};
+
+	auto find_evidence =
+			[evidence, evidence_count](uint32_t id) -> const uint8_t *
+			{
+				for (uint32_t i = 0; i < evidence_count; i++)
+				{
+					const uint8_t *const record =
+							evidence
+								+ uint64_t(i)
+									* cdrom_file::CDM1_EVIDENCE_RECORD_BYTES;
+
+					if (get_u32be(record + 0) == id)
+						return record;
+				}
+
+				return nullptr;
+			};
+
+	auto find_storage =
+			[storage, storage_count](uint32_t id) -> const uint8_t *
+			{
+				for (uint32_t i = 0; i < storage_count; i++)
+				{
+					const uint8_t *const record =
+							storage
+								+ uint64_t(i)
+									* cdrom_file::CDM1_STORAGE_RECORD_BYTES;
+
+					if (get_u32be(record + 0) == id)
+						return record;
+				}
+
+				return nullptr;
+			};
+
+	auto validate_endpoint =
+			[&find_region, &find_evidence, &find_storage](
+					uint16_t kind,
+					uint32_t id,
+					uint64_t offset,
+					uint64_t length)
+			{
+				if (kind
+						== uint16_t(cdrom_file::cdm1_mapping_object::region))
+				{
+					const uint8_t *const record = find_region(id);
+
+					if (!record)
+						return false;
+
+					const uint16_t flags = get_u16be(record + 14);
+
+					if (!(flags
+							& uint16_t(
+									cdrom_file::cdm1_region_flag::length_known)))
+					{
+						return true;
+					}
+
+					const uint64_t extent = get_u64be(record + 24);
+
+					return offset <= extent
+							&& length <= extent - offset;
+				}
+
+				if (kind
+						== uint16_t(cdrom_file::cdm1_mapping_object::evidence))
+				{
+					const uint8_t *const record = find_evidence(id);
+
+					if (!record)
+						return false;
+
+					const uint64_t extent = get_u64be(record + 16);
+
+					return offset <= extent
+							&& length <= extent - offset;
+				}
+
+				if (kind
+						== uint16_t(cdrom_file::cdm1_mapping_object::storage))
+				{
+					const uint8_t *const record = find_storage(id);
+
+					if (!record)
+						return false;
+
+					const uint64_t extent = get_u64be(record + 24);
+
+					return offset <= extent
+							&& length <= extent - offset;
+				}
+
+				return false;
+			};
+
+	for (uint32_t i = 0; i < mapping_count; i++)
+	{
+		const uint8_t *const record =
+				mappings
+					+ uint64_t(i)
+						* cdrom_file::CDM1_MAPPING_RECORD_BYTES;
+
+		const uint32_t source_id = get_u32be(record + 4);
+		const uint32_t target_id = get_u32be(record + 8);
+		const uint16_t source_kind = get_u16be(record + 16);
+		const uint16_t target_kind = get_u16be(record + 18);
+		const uint64_t source_offset = get_u64be(record + 24);
+		const uint64_t source_length = get_u64be(record + 32);
+		const uint64_t target_offset = get_u64be(record + 40);
+		const uint64_t target_length = get_u64be(record + 48);
+
+		if (!validate_endpoint(
+					source_kind,
+					source_id,
+					source_offset,
+					source_length)
+				|| !validate_endpoint(
+					target_kind,
+					target_id,
+					target_offset,
+					target_length))
+		{
+			return chd_file::error::INVALID_DATA;
+		}
+	}
+
+	return std::error_condition();
+}
+
 } // anonymous namespace
 
 /***************************************************************************
@@ -1102,8 +1295,16 @@ std::error_condition cdrom_file::validate_cdm1_metadata(
 					data,
 					directory_offset);
 
-	if (core_reference_err)
+		if (core_reference_err)
 		return core_reference_err;
+
+	const std::error_condition mapping_reference_err =
+			validate_cdm1_mapping_references(
+					data,
+					directory_offset);
+
+	if (mapping_reference_err)
+		return mapping_reference_err;
 
 	return std::error_condition();
 }
