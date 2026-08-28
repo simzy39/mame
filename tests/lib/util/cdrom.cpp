@@ -4319,7 +4319,6 @@ TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 				cdrom_file::validate_cdm1_metadata(metadata)
 					== chd_file::error::INVALID_DATA);
 	}
-}
 
 	SECTION("INDX id must be nonzero")
 	{
@@ -4484,6 +4483,7 @@ TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 				cdrom_file::validate_cdm1_metadata(metadata)
 					== chd_file::error::INVALID_DATA);
 	}
+}
 
 TEST_CASE("CD-ROM CDM1 section directory decoding", "[util][cdrom]")
 {
