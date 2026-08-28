@@ -4321,6 +4321,170 @@ TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 	}
 }
 
+	SECTION("INDX id must be nonzero")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t index_record_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_DISC_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 2 * cdrom_file::CDM1_SESSION_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 3 * cdrom_file::CDM1_TRACK_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+		cdm1_test_put_u32be(metadata, index_record_offset + 0, 0);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+	SECTION("INDX ids must be unique")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t index_record_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_DISC_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 2 * cdrom_file::CDM1_SESSION_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 3 * cdrom_file::CDM1_TRACK_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+		cdm1_test_put_u32be(
+				metadata,
+				index_record_offset
+					+ cdrom_file::CDM1_INDEX_RECORD_BYTES
+					+ 0,
+				1);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+	SECTION("INDX track id must be nonzero")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t index_record_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_DISC_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 2 * cdrom_file::CDM1_SESSION_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 3 * cdrom_file::CDM1_TRACK_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+		cdm1_test_put_u32be(metadata, index_record_offset + 4, 0);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+	SECTION("INDX number must be supported")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t index_record_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_DISC_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 2 * cdrom_file::CDM1_SESSION_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 3 * cdrom_file::CDM1_TRACK_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+		cdm1_test_put_u16be(metadata, index_record_offset + 8, 100);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+	SECTION("INDX numbers must be unique within a track")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t index_record_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_DISC_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 2 * cdrom_file::CDM1_SESSION_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 3 * cdrom_file::CDM1_TRACK_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+		cdm1_test_put_u16be(
+				metadata,
+				index_record_offset
+					+ cdrom_file::CDM1_INDEX_RECORD_BYTES
+					+ 8,
+				0);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+	SECTION("INDX semantic source must be recognized")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t index_record_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_DISC_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 2 * cdrom_file::CDM1_SESSION_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 3 * cdrom_file::CDM1_TRACK_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+		cdm1_test_put_u16be(metadata, index_record_offset + 10, 3);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+	SECTION("INDX flags must be zero")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t index_record_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_DISC_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 2 * cdrom_file::CDM1_SESSION_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 3 * cdrom_file::CDM1_TRACK_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+		cdm1_test_put_u32be(metadata, index_record_offset + 12, 1);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
 TEST_CASE("CD-ROM CDM1 section directory decoding", "[util][cdrom]")
 {
 	SECTION("decodes canonical directory")
