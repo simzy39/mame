@@ -120,108 +120,135 @@ public:
 		captured_position captured;
 	};
 
-        // CDM1 canonical CD metadata schema.
-        static constexpr uint16_t CDM1_VERSION_MAJOR = 1;
-        static constexpr uint16_t CDM1_VERSION_MINOR = 0;
+        	// CDM1 canonical CD metadata schema.
+	static constexpr uint16_t CDM1_VERSION_MAJOR = 1;
+	static constexpr uint16_t CDM1_VERSION_MINOR = 0;
 
-        enum class cdm1_section : uint32_t
-        {
-                disc     = 0x44495343, // DISC
-                sessions = 0x53455353, // SESS
-                tracks   = 0x5452414b, // TRAK
-                indexes  = 0x494e4458, // INDX
-                regions  = 0x5245474e, // REGN
-                evidence = 0x45564944, // EVID
-                mappings = 0x4d415053  // MAPS
-        };
+	enum class cdm1_section : uint32_t
+	{
+		disc     = 0x44495343, // DISC
+		sessions = 0x53455353, // SESS
+		tracks   = 0x5452414b, // TRAK
+		indexes  = 0x494e4458, // INDX
+		regions  = 0x5245474e, // REGN
+		evidence = 0x45564944, // EVID
+		storage  = 0x53544f52, // STOR
+		mappings = 0x4d415053  // MAPS
+	};
 
-        enum class cdm1_section_flag : uint16_t
-        {
-                required = 0x0001
-        };
+	enum class cdm1_section_flag : uint16_t
+	{
+		required = 0x0001
+	};
 
-                enum class cdm1_region_owner : uint16_t
-        {
-                session = 1,
-                track = 2
-        };
+	enum class cdm1_region_owner : uint16_t
+	{
+		session = 1,
+		track = 2
+	};
 
-        enum class cdm1_region_kind : uint16_t
-        {
-                lead_in = 1,
-                pregap = 2,
-                program = 3,
-                postgap = 4,
-                lead_out = 5
-        };
+	enum class cdm1_region_kind : uint16_t
+	{
+		lead_in = 1,
+		pregap = 2,
+		program = 3,
+		postgap = 4,
+		lead_out = 5
+	};
 
-        enum class cdm1_region_flag : uint16_t
-        {
-                length_known = 0x0001
-        };
+	enum class cdm1_region_flag : uint16_t
+	{
+		length_known = 0x0001
+	};
 
-        enum class cdm1_track_type : uint16_t
-        {
-                unknown = 0,
-                mode1 = 1,
-                mode1_raw = 2,
-                mode2 = 3,
-                mode2_form1 = 4,
-                mode2_form2 = 5,
-                mode2_form_mix = 6,
-                mode2_raw = 7,
-                audio = 8
-        };
+	enum class cdm1_track_type : uint16_t
+	{
+		unknown = 0,
+		mode1 = 1,
+		mode1_raw = 2,
+		mode2 = 3,
+		mode2_form1 = 4,
+		mode2_form2 = 5,
+		mode2_form_mix = 6,
+		mode2_raw = 7,
+		audio = 8
+	};
 
-        enum class cdm1_evidence_class : uint16_t
-        {
-                decoded_main = 1,
-                raw_pw = 2
-        };
+	enum class cdm1_evidence_class : uint16_t
+	{
+		decoded_main = 1,
+		raw_pw = 2,
+		channel_bits = 3,
+		efm_symbols = 4,
+		circ_symbols = 5,
+		rf_samples = 6,
+		timing = 7,
+		wobble = 8,
+		servo = 9
+	};
 
-        enum class cdm1_storage_class : uint16_t
-        {
-                chdv5_unit_slice = 1
-        };
+	enum class cdm1_storage_class : uint16_t
+	{
+		chdv5_logical = 1
+	};
 
-        enum class cdm1_coordinate_class : uint16_t
-        {
-                decoded_frame = 1
-        };
+	enum class cdm1_storage_encoding : uint16_t
+	{
+		raw = 0
+	};
 
-        enum class cdm1_mapping_class : uint16_t
-        {
-                linear_interval = 1
-        };
+	enum class cdm1_coordinate_class : uint16_t
+	{
+		decoded_frame = 1,
+		subcode_frame = 2,
+		channel_bit = 3,
+		efm_symbol = 4,
+		circ_symbol = 5,
+		sample = 6,
+		time_tick = 7
+	};
 
-        enum class cdm1_provenance : uint16_t
-        {
-                unknown = 0,
-                captured = 1,
-                derived = 2,
-                generated = 3
-        };
+	enum class cdm1_mapping_object : uint16_t
+	{
+		region = 1,
+		evidence = 2,
+		storage = 3
+	};
 
-        enum class cdm1_semantic_source : uint16_t
-        {
-                unknown = 0,
-                explicit_fallback = 1,
-                derived_capture = 2
-        };
+	enum class cdm1_mapping_class : uint16_t
+	{
+		linear_interval = 1
+	};
 
-        static constexpr uint32_t CDM1_MAGIC = 0x43444d31; // CDM1
+	enum class cdm1_provenance : uint16_t
+	{
+		unknown = 0,
+		captured = 1,
+		derived = 2,
+		generated = 3
+	};
 
-        static constexpr uint32_t CDM1_HEADER_BYTES = 40;
-        static constexpr uint32_t CDM1_SECTION_ENTRY_BYTES = 24;
-        static constexpr uint32_t CDM1_TABLE_HEADER_BYTES = 16;
+	enum class cdm1_semantic_source : uint16_t
+	{
+		unknown = 0,
+		explicit_fallback = 1,
+		derived_capture = 2
+	};
 
-        static constexpr uint32_t CDM1_DISC_RECORD_BYTES = 32;
-        static constexpr uint32_t CDM1_SESSION_RECORD_BYTES = 32;
-        static constexpr uint32_t CDM1_TRACK_RECORD_BYTES = 24;
-        static constexpr uint32_t CDM1_INDEX_RECORD_BYTES = 24;
-        static constexpr uint32_t CDM1_REGION_RECORD_BYTES = 40;
-        static constexpr uint32_t CDM1_EVIDENCE_RECORD_BYTES = 48;
-        static constexpr uint32_t CDM1_MAPPING_RECORD_BYTES = 48;
+	static constexpr uint32_t CDM1_MAGIC = 0x43444d31; // CDM1
+
+	static constexpr uint32_t CDM1_HEADER_BYTES = 40;
+	static constexpr uint32_t CDM1_SECTION_ENTRY_BYTES = 24;
+	static constexpr uint32_t CDM1_TABLE_HEADER_BYTES = 16;
+
+	static constexpr uint32_t CDM1_DISC_RECORD_BYTES = 8;
+	static constexpr uint32_t CDM1_SESSION_RECORD_BYTES = 32;
+	static constexpr uint32_t CDM1_TRACK_RECORD_BYTES = 16;
+	static constexpr uint32_t CDM1_INDEX_RECORD_BYTES = 24;
+	static constexpr uint32_t CDM1_REGION_RECORD_BYTES = 32;
+	static constexpr uint32_t CDM1_EVIDENCE_RECORD_BYTES = 24;
+	static constexpr uint32_t CDM1_STORAGE_RECORD_BYTES = 32;
+	static constexpr uint32_t CDM1_MAPPING_RECORD_BYTES = 56;
 
 	enum class region_kind
 	{
