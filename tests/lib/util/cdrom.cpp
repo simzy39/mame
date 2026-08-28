@@ -4027,6 +4027,53 @@ static std::vector<uint8_t> make_valid_cdm1_test_metadata()
 		cdm1_test_put_u64be(metadata, record + 16, 4000);
 	}
 
+		const uint32_t storage_section_offset =
+			evidence_section_offset
+				+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+				+ record_counts[5] * cdrom_file::CDM1_EVIDENCE_RECORD_BYTES;
+
+	const uint32_t storage_records_offset =
+			storage_section_offset
+				+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+	{
+		const uint32_t record = storage_records_offset;
+
+		cdm1_test_put_u32be(metadata, record + 0, 1);
+		cdm1_test_put_u32be(metadata, record + 4, 0);
+		cdm1_test_put_u16be(
+				metadata,
+				record + 8,
+				uint16_t(cdrom_file::cdm1_storage_class::chdv5_logical));
+		cdm1_test_put_u16be(
+				metadata,
+				record + 10,
+				uint16_t(cdrom_file::cdm1_storage_encoding::raw));
+		cdm1_test_put_u32be(metadata, record + 12, 1);
+		cdm1_test_put_u64be(metadata, record + 16, 0);
+		cdm1_test_put_u64be(metadata, record + 24, uint64_t(4000) * 2352);
+	}
+
+	{
+		const uint32_t record =
+				storage_records_offset
+					+ cdrom_file::CDM1_STORAGE_RECORD_BYTES;
+
+		cdm1_test_put_u32be(metadata, record + 0, 2);
+		cdm1_test_put_u32be(metadata, record + 4, 0);
+		cdm1_test_put_u16be(
+				metadata,
+				record + 8,
+				uint16_t(cdrom_file::cdm1_storage_class::chdv5_logical));
+		cdm1_test_put_u16be(
+				metadata,
+				record + 10,
+				uint16_t(cdrom_file::cdm1_storage_encoding::raw));
+		cdm1_test_put_u32be(metadata, record + 12, 1);
+		cdm1_test_put_u64be(metadata, record + 16, uint64_t(4000) * 2352);
+		cdm1_test_put_u64be(metadata, record + 24, uint64_t(4000) * 96);
+	}
+	
 	return metadata;
 }
 
