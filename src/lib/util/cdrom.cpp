@@ -361,6 +361,83 @@ std::error_condition validate_cdm1_index_records(
 	return std::error_condition();
 }
 
+std::error_condition validate_cdm1_region_records(
+		const uint8_t *data,
+		uint32_t directory_offset)
+{
+	const uint8_t *const region_entry =
+			data
+				+ directory_offset
+				+ 4 * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
+
+	const uint32_t section_offset =
+			get_u32be(
+					region_entry
+						+ CDM1_SECTION_OFFSET_OFFSET);
+	const uint32_t record_count =
+			get_u32be(
+					region_entry
+						+ CDM1_SECTION_COUNT_OFFSET);
+
+	const uint8_t *const records =
+			data
+				+ section_offset
+				+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+	for (uint32_t i = 0; i < record_count; i++)
+	{
+		const uint8_t *const record =
+				records
+					+ uint64_t(i)
+						* cdrom_file::CDM1_REGION_RECORD_BYTES;
+
+		const uint32_t id = get_u32be(record + 0);
+		const uint32_t owner_id = get_u32be(record + 4);
+		const uint16_t owner_type = get_u16be(record + 8);
+		const uint16_t kind = get_u16be(record + 10);
+		const uint16_t semantic_source = get_u16be(record + 12);
+		const uint16_t flags = get_u16be(record + 14);
+
+		if (id == 0
+				|| owner_id == 0
+				|| owner_type < uint16_t(cdrom_file::cdm1_region_owner::session)
+				|| owner_type > uint16_t(cdrom_file::cdm1_region_owner::track)
+				|| kind < uint16_t(cdrom_file::cdm1_region_kind::lead_in)
+				|| kind > uint16_t(cdrom_file::cdm1_region_kind::lead_out)
+				|| semantic_source
+					> uint16_t(cdrom_file::cdm1_semantic_source::derived_capture)
+				|| (flags
+					& ~uint16_t(cdrom_file::cdm1_region_flag::length_known)))
+		{
+			return chd_file::error::INVALID_DATA;
+		}
+
+		const bool session_region =
+				kind == uint16_t(cdrom_file::cdm1_region_kind::lead_in)
+					|| kind == uint16_t(cdrom_file::cdm1_region_kind::lead_out);
+
+		if (session_region
+				!= (owner_type
+					== uint16_t(cdrom_file::cdm1_region_owner::session)))
+		{
+			return chd_file::error::INVALID_DATA;
+		}
+
+		for (uint32_t previous = 0; previous < i; previous++)
+		{
+			const uint8_t *const previous_record =
+					records
+						+ uint64_t(previous)
+							* cdrom_file::CDM1_REGION_RECORD_BYTES;
+
+			if (get_u32be(previous_record + 0) == id)
+				return chd_file::error::INVALID_DATA;
+		}
+	}
+
+	return std::error_condition();
+}
+
 } // anonymous namespace
 
 /***************************************************************************
@@ -569,13 +646,21 @@ std::error_condition cdrom_file::validate_cdm1_metadata(
 	if (track_err)
 		return track_err;
 
-	const std::error_condition index_err =
+		const std::error_condition index_err =
 			validate_cdm1_index_records(
 					data,
 					directory_offset);
 
 	if (index_err)
 		return index_err;
+
+	const std::error_condition region_err =
+			validate_cdm1_region_records(
+					data,
+					directory_offset);
+
+	if (region_err)
+		return region_err;
 
 	return std::error_condition();
 }
