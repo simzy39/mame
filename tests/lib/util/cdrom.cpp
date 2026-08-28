@@ -3696,7 +3696,7 @@ static std::vector<uint8_t> make_valid_cdm1_test_metadata()
 
 		constexpr std::array<uint32_t, section_count> record_counts =
 	{
-		1, 2, 3, 4, 5, 2, 2, 5
+		1, 2, 3, 4, 5, 2, 2, 6
 	};
 
 	uint32_t total_bytes = first_section_offset;
@@ -4073,6 +4073,92 @@ static std::vector<uint8_t> make_valid_cdm1_test_metadata()
 		cdm1_test_put_u64be(metadata, record + 16, uint64_t(4000) * 2352);
 		cdm1_test_put_u64be(metadata, record + 24, uint64_t(4000) * 96);
 	}
+
+		const uint32_t mapping_section_offset =
+			storage_section_offset
+				+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+				+ record_counts[6] * cdrom_file::CDM1_STORAGE_RECORD_BYTES;
+
+	const uint32_t mapping_records_offset =
+			mapping_section_offset
+				+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+	auto put_mapping =
+			[&metadata, mapping_records_offset](
+					uint32_t index,
+					uint32_t id,
+					uint32_t source_id,
+					uint32_t target_id,
+					cdrom_file::cdm1_mapping_object source_kind,
+					cdrom_file::cdm1_mapping_object target_kind,
+					cdrom_file::cdm1_mapping_provenance provenance,
+					uint64_t source_offset,
+					uint64_t source_length,
+					uint64_t target_offset,
+					uint64_t target_length)
+			{
+				const uint32_t record =
+						mapping_records_offset
+							+ index * cdrom_file::CDM1_MAPPING_RECORD_BYTES;
+
+				cdm1_test_put_u32be(metadata, record + 0, id);
+				cdm1_test_put_u32be(metadata, record + 4, source_id);
+				cdm1_test_put_u32be(metadata, record + 8, target_id);
+				cdm1_test_put_u32be(metadata, record + 12, 0);
+				cdm1_test_put_u16be(metadata, record + 16, uint16_t(source_kind));
+				cdm1_test_put_u16be(metadata, record + 18, uint16_t(target_kind));
+				cdm1_test_put_u16be(
+						metadata,
+						record + 20,
+						uint16_t(cdrom_file::cdm1_mapping_class::linear_interval));
+				cdm1_test_put_u16be(metadata, record + 22, uint16_t(provenance));
+				cdm1_test_put_u64be(metadata, record + 24, source_offset);
+				cdm1_test_put_u64be(metadata, record + 32, source_length);
+				cdm1_test_put_u64be(metadata, record + 40, target_offset);
+				cdm1_test_put_u64be(metadata, record + 48, target_length);
+			};
+
+	put_mapping(
+			0, 1, 1, 1,
+			cdrom_file::cdm1_mapping_object::region,
+			cdrom_file::cdm1_mapping_object::evidence,
+			cdrom_file::cdm1_mapping_provenance::captured,
+			0, 1000, 0, 1000);
+
+	put_mapping(
+			1, 2, 2, 1,
+			cdrom_file::cdm1_mapping_object::region,
+			cdrom_file::cdm1_mapping_object::evidence,
+			cdrom_file::cdm1_mapping_provenance::captured,
+			0, 1000, 1000, 1000);
+
+	put_mapping(
+			2, 3, 3, 1,
+			cdrom_file::cdm1_mapping_object::region,
+			cdrom_file::cdm1_mapping_object::evidence,
+			cdrom_file::cdm1_mapping_provenance::captured,
+			0, 1000, 2000, 1000);
+
+	put_mapping(
+			3, 4, 4, 1,
+			cdrom_file::cdm1_mapping_object::region,
+			cdrom_file::cdm1_mapping_object::evidence,
+			cdrom_file::cdm1_mapping_provenance::captured,
+			0, 1000, 3000, 1000);
+
+	put_mapping(
+			4, 5, 1, 1,
+			cdrom_file::cdm1_mapping_object::evidence,
+			cdrom_file::cdm1_mapping_object::storage,
+			cdrom_file::cdm1_mapping_provenance::captured,
+			0, 4000, 0, uint64_t(4000) * 2352);
+
+	put_mapping(
+			5, 6, 2, 2,
+			cdrom_file::cdm1_mapping_object::evidence,
+			cdrom_file::cdm1_mapping_object::storage,
+			cdrom_file::cdm1_mapping_provenance::captured,
+			0, 4000, 0, uint64_t(4000) * 96);
 	
 	return metadata;
 }
