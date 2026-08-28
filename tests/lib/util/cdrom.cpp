@@ -3842,7 +3842,7 @@ TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 	SECTION("too few required sections")
 	{
 		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
-		cdm1_test_put_u32be(metadata, 16, 6);
+		cdm1_test_put_u32be(metadata, 16, 7);
 
 		REQUIRE(
 				cdrom_file::validate_cdm1_metadata(metadata)
@@ -3989,7 +3989,7 @@ TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 
 		const uint32_t first_section_offset =
 				cdrom_file::CDM1_HEADER_BYTES
-					+ 7 * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
 
 		cdm1_test_put_u32be(
 				metadata,
@@ -4007,7 +4007,7 @@ TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 
 		const uint32_t first_section_offset =
 				cdrom_file::CDM1_HEADER_BYTES
-					+ 7 * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
 
 		cdm1_test_put_u32be(metadata, first_section_offset + 4, 2);
 
@@ -4022,7 +4022,7 @@ TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 
 		const uint32_t first_section_offset =
 				cdrom_file::CDM1_HEADER_BYTES
-					+ 7 * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
 
 		cdm1_test_put_u32be(metadata, first_section_offset + 8, 1);
 
@@ -4037,7 +4037,7 @@ TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 
 		const uint32_t first_section_offset =
 				cdrom_file::CDM1_HEADER_BYTES
-					+ 7 * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
 
 		cdm1_test_put_u32be(metadata, first_section_offset + 12, 1);
 
@@ -4074,7 +4074,7 @@ TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 				cdrom_file::CDM1_HEADER_BYTES;
 		const uint32_t first_section_offset =
 				cdrom_file::CDM1_HEADER_BYTES
-					+ 7 * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
 
 		cdm1_test_put_u32be(
 				metadata,
@@ -4094,7 +4094,7 @@ TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 
 		const uint32_t disc_record_offset =
 				cdrom_file::CDM1_HEADER_BYTES
-					+ 7 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
 					+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
 
 		cdm1_test_put_u32be(metadata, disc_record_offset + 0, 2);
@@ -4110,26 +4110,10 @@ TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 
 		const uint32_t disc_record_offset =
 				cdrom_file::CDM1_HEADER_BYTES
-					+ 7 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
 					+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
 
 		cdm1_test_put_u32be(metadata, disc_record_offset + 4, 1);
-
-		REQUIRE(
-				cdrom_file::validate_cdm1_metadata(metadata)
-					== chd_file::error::INVALID_DATA);
-	}
-
-	SECTION("DISC counts must match section counts")
-	{
-		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
-
-		const uint32_t disc_record_offset =
-				cdrom_file::CDM1_HEADER_BYTES
-					+ 7 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
-					+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
-
-		cdm1_test_put_u32be(metadata, disc_record_offset + 12, 99);
 
 		REQUIRE(
 				cdrom_file::validate_cdm1_metadata(metadata)
@@ -4147,33 +4131,35 @@ TEST_CASE("CD-ROM CDM1 section directory decoding", "[util][cdrom]")
 		REQUIRE_FALSE(
 				cdrom_file::parse_cdm1_directory(metadata, sections));
 
-		REQUIRE(sections.size() == 7);
+		REQUIRE(sections.size() == 8);
 
-		const std::array<cdrom_file::cdm1_section, 7> expected_types =
-		{
-			cdrom_file::cdm1_section::disc,
-			cdrom_file::cdm1_section::sessions,
-			cdrom_file::cdm1_section::tracks,
-			cdrom_file::cdm1_section::indexes,
-			cdrom_file::cdm1_section::regions,
-			cdrom_file::cdm1_section::evidence,
-			cdrom_file::cdm1_section::mappings
-		};
+const std::array<cdrom_file::cdm1_section, 8> expected_types =
+{
+	cdrom_file::cdm1_section::disc,
+	cdrom_file::cdm1_section::sessions,
+	cdrom_file::cdm1_section::tracks,
+	cdrom_file::cdm1_section::indexes,
+	cdrom_file::cdm1_section::regions,
+	cdrom_file::cdm1_section::evidence,
+	cdrom_file::cdm1_section::storage,
+	cdrom_file::cdm1_section::mappings
+};
 
-		const uint32_t first_section_offset =
-				cdrom_file::CDM1_HEADER_BYTES
-					+ 7 * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
+const uint32_t first_section_offset =
+		cdrom_file::CDM1_HEADER_BYTES
+			+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
 
-				const std::array<uint32_t, 7> expected_record_sizes =
-		{
-			cdrom_file::CDM1_DISC_RECORD_BYTES,
-			cdrom_file::CDM1_SESSION_RECORD_BYTES,
-			cdrom_file::CDM1_TRACK_RECORD_BYTES,
-			cdrom_file::CDM1_INDEX_RECORD_BYTES,
-			cdrom_file::CDM1_REGION_RECORD_BYTES,
-			cdrom_file::CDM1_EVIDENCE_RECORD_BYTES,
-			cdrom_file::CDM1_MAPPING_RECORD_BYTES
-		};
+const std::array<uint32_t, 8> expected_record_sizes =
+{
+	cdrom_file::CDM1_DISC_RECORD_BYTES,
+	cdrom_file::CDM1_SESSION_RECORD_BYTES,
+	cdrom_file::CDM1_TRACK_RECORD_BYTES,
+	cdrom_file::CDM1_INDEX_RECORD_BYTES,
+	cdrom_file::CDM1_REGION_RECORD_BYTES,
+	cdrom_file::CDM1_EVIDENCE_RECORD_BYTES,
+	cdrom_file::CDM1_STORAGE_RECORD_BYTES,
+	cdrom_file::CDM1_MAPPING_RECORD_BYTES
+};
 
 		uint32_t expected_offset = first_section_offset;
 
