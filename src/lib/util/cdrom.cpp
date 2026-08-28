@@ -564,6 +564,88 @@ std::error_condition validate_cdm1_storage_records(
 	return std::error_condition();
 }
 
+std::error_condition validate_cdm1_mapping_records(
+		const uint8_t *data,
+		uint32_t directory_offset)
+{
+	const uint8_t *const mapping_entry =
+			data
+				+ directory_offset
+				+ 7 * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
+
+	const uint32_t section_offset =
+			get_u32be(
+					mapping_entry
+						+ CDM1_SECTION_OFFSET_OFFSET);
+	const uint32_t record_count =
+			get_u32be(
+					mapping_entry
+						+ CDM1_SECTION_COUNT_OFFSET);
+
+	const uint8_t *const records =
+			data
+				+ section_offset
+				+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+	for (uint32_t i = 0; i < record_count; i++)
+	{
+		const uint8_t *const record =
+				records
+					+ uint64_t(i)
+						* cdrom_file::CDM1_MAPPING_RECORD_BYTES;
+
+		const uint32_t id = get_u32be(record + 0);
+		const uint32_t source_id = get_u32be(record + 4);
+		const uint32_t target_id = get_u32be(record + 8);
+		const uint32_t flags = get_u32be(record + 12);
+		const uint16_t source_kind = get_u16be(record + 16);
+		const uint16_t target_kind = get_u16be(record + 18);
+		const uint16_t mapping_class = get_u16be(record + 20);
+		const uint16_t provenance = get_u16be(record + 22);
+		const uint64_t source_offset = get_u64be(record + 24);
+		const uint64_t source_length = get_u64be(record + 32);
+		const uint64_t target_offset = get_u64be(record + 40);
+		const uint64_t target_length = get_u64be(record + 48);
+
+		if (id == 0
+				|| source_id == 0
+				|| target_id == 0
+				|| flags != 0
+				|| source_kind
+					< uint16_t(cdrom_file::cdm1_mapping_object::region)
+				|| source_kind
+					> uint16_t(cdrom_file::cdm1_mapping_object::storage)
+				|| target_kind
+					< uint16_t(cdrom_file::cdm1_mapping_object::region)
+				|| target_kind
+					> uint16_t(cdrom_file::cdm1_mapping_object::storage)
+				|| mapping_class
+					!= uint16_t(cdrom_file::cdm1_mapping_class::linear_interval)
+				|| provenance
+					> uint16_t(cdrom_file::cdm1_provenance::generated)
+				|| source_length == 0
+				|| target_length == 0
+				|| source_offset > UINT64_MAX - source_length
+				|| target_offset > UINT64_MAX - target_length)
+		{
+			return chd_file::error::INVALID_DATA;
+		}
+
+		for (uint32_t previous = 0; previous < i; previous++)
+		{
+			const uint8_t *const previous_record =
+					records
+						+ uint64_t(previous)
+							* cdrom_file::CDM1_MAPPING_RECORD_BYTES;
+
+			if (get_u32be(previous_record + 0) == id)
+				return chd_file::error::INVALID_DATA;
+		}
+	}
+
+	return std::error_condition();
+}
+
 } // anonymous namespace
 
 /***************************************************************************
@@ -801,8 +883,16 @@ std::error_condition cdrom_file::validate_cdm1_metadata(
 					data,
 					directory_offset);
 
-	if (storage_err)
+		if (storage_err)
 		return storage_err;
+
+	const std::error_condition mapping_err =
+			validate_cdm1_mapping_records(
+					data,
+					directory_offset);
+
+	if (mapping_err)
+		return mapping_err;
 
 	return std::error_condition();
 }
