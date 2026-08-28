@@ -5153,6 +5153,178 @@ TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 				cdrom_file::validate_cdm1_metadata(metadata)
 					== chd_file::error::INVALID_DATA);
 	}
+
+		SECTION("STOR id must be nonzero")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t storage_record_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_DISC_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 2 * cdrom_file::CDM1_SESSION_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 3 * cdrom_file::CDM1_TRACK_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 4 * cdrom_file::CDM1_INDEX_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 5 * cdrom_file::CDM1_REGION_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 2 * cdrom_file::CDM1_EVIDENCE_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+		cdm1_test_put_u32be(metadata, storage_record_offset + 0, 0);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+	SECTION("STOR ids must be unique")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t storage_record_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_DISC_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 2 * cdrom_file::CDM1_SESSION_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 3 * cdrom_file::CDM1_TRACK_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 4 * cdrom_file::CDM1_INDEX_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 5 * cdrom_file::CDM1_REGION_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 2 * cdrom_file::CDM1_EVIDENCE_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+		cdm1_test_put_u32be(
+				metadata,
+				storage_record_offset
+					+ cdrom_file::CDM1_STORAGE_RECORD_BYTES,
+				1);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+	SECTION("STOR flags must be zero")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t storage_record_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_DISC_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 2 * cdrom_file::CDM1_SESSION_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 3 * cdrom_file::CDM1_TRACK_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 4 * cdrom_file::CDM1_INDEX_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 5 * cdrom_file::CDM1_REGION_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 2 * cdrom_file::CDM1_EVIDENCE_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+		cdm1_test_put_u32be(metadata, storage_record_offset + 4, 1);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+	SECTION("STOR class must be recognized")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t storage_record_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_DISC_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 2 * cdrom_file::CDM1_SESSION_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 3 * cdrom_file::CDM1_TRACK_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 4 * cdrom_file::CDM1_INDEX_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 5 * cdrom_file::CDM1_REGION_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 2 * cdrom_file::CDM1_EVIDENCE_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+		cdm1_test_put_u16be(metadata, storage_record_offset + 8, 0);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+	SECTION("STOR encoding must be recognized")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t storage_record_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_DISC_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 2 * cdrom_file::CDM1_SESSION_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 3 * cdrom_file::CDM1_TRACK_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 4 * cdrom_file::CDM1_INDEX_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 5 * cdrom_file::CDM1_REGION_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 2 * cdrom_file::CDM1_EVIDENCE_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+		cdm1_test_put_u16be(metadata, storage_record_offset + 10, 1);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+	SECTION("STOR unit size must be nonzero")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t storage_record_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 8 * cdrom_file::CDM1_SECTION_ENTRY_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_DISC_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 2 * cdrom_file::CDM1_SESSION_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 3 * cdrom_file::CDM1_TRACK_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 4 * cdrom_file::CDM1_INDEX_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 5 * cdrom_file::CDM1_REGION_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ 2 * cdrom_file::CDM1_EVIDENCE_RECORD_BYTES
+					+ cdrom_file::CDM1_TABLE_HEADER_BYTES;
+
+		cdm1_test_put_u32be(metadata, storage_record_offset + 12, 0);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
 }
 
 TEST_CASE("CD-ROM CDM1 section directory decoding", "[util][cdrom]")
