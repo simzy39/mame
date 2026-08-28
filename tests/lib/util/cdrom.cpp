@@ -3625,83 +3625,125 @@ TEST_CASE("CD-ROM Q position generation preserves canonical control flags", "[ut
 	}
 }
 
+static void cdm1_test_put_u16be(
+		std::vector<uint8_t> &data,
+		size_t offset,
+		uint16_t value)
+{
+	data[offset + 0] = uint8_t(value >> 8);
+	data[offset + 1] = uint8_t(value);
+}
+
+static void cdm1_test_put_u32be(
+		std::vector<uint8_t> &data,
+		size_t offset,
+		uint32_t value)
+{
+	data[offset + 0] = uint8_t(value >> 24);
+	data[offset + 1] = uint8_t(value >> 16);
+	data[offset + 2] = uint8_t(value >> 8);
+	data[offset + 3] = uint8_t(value);
+}
+
+static std::vector<uint8_t> make_valid_cdm1_test_metadata()
+{
+	constexpr uint32_t section_count = 7;
+	constexpr uint32_t directory_offset =
+			cdrom_file::CDM1_HEADER_BYTES;
+	constexpr uint32_t directory_bytes =
+			section_count * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
+	constexpr uint32_t first_section_offset =
+			directory_offset + directory_bytes;
+
+	constexpr std::array<cdrom_file::cdm1_section, section_count> sections =
+	{
+		cdrom_file::cdm1_section::disc,
+		cdrom_file::cdm1_section::sessions,
+		cdrom_file::cdm1_section::tracks,
+		cdrom_file::cdm1_section::indexes,
+		cdrom_file::cdm1_section::regions,
+		cdrom_file::cdm1_section::evidence,
+		cdrom_file::cdm1_section::mappings
+	};
+
+	constexpr std::array<uint32_t, section_count> record_sizes =
+	{
+		cdrom_file::CDM1_DISC_RECORD_BYTES,
+		cdrom_file::CDM1_SESSION_RECORD_BYTES,
+		cdrom_file::CDM1_TRACK_RECORD_BYTES,
+		cdrom_file::CDM1_INDEX_RECORD_BYTES,
+		cdrom_file::CDM1_REGION_RECORD_BYTES,
+		cdrom_file::CDM1_EVIDENCE_RECORD_BYTES,
+		cdrom_file::CDM1_MAPPING_RECORD_BYTES
+	};
+
+	constexpr std::array<uint32_t, section_count> record_counts =
+	{
+		1, 2, 3, 4, 5, 6, 7
+	};
+
+	uint32_t total_bytes = first_section_offset;
+
+	for (uint32_t i = 0; i < section_count; i++)
+		total_bytes +=
+				cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ record_counts[i] * record_sizes[i];
+
+	std::vector<uint8_t> metadata(total_bytes, 0);
+
+	cdm1_test_put_u32be(metadata, 0, cdrom_file::CDM1_MAGIC);
+	cdm1_test_put_u16be(metadata, 4, cdrom_file::CDM1_VERSION_MAJOR);
+	cdm1_test_put_u16be(metadata, 6, cdrom_file::CDM1_VERSION_MINOR);
+	cdm1_test_put_u32be(metadata, 8, cdrom_file::CDM1_HEADER_BYTES);
+	cdm1_test_put_u32be(metadata, 12, total_bytes);
+	cdm1_test_put_u32be(metadata, 16, section_count);
+	cdm1_test_put_u32be(metadata, 20, directory_offset);
+
+	uint32_t section_offset = first_section_offset;
+
+	for (uint32_t i = 0; i < section_count; i++)
+	{
+		const uint32_t entry =
+				directory_offset
+					+ i * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
+		const uint32_t section_length =
+				cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ record_counts[i] * record_sizes[i];
+
+		cdm1_test_put_u32be(metadata, entry + 0, uint32_t(sections[i]));
+		cdm1_test_put_u16be(metadata, entry + 4, 1);
+		cdm1_test_put_u16be(
+				metadata,
+				entry + 6,
+				uint16_t(cdrom_file::cdm1_section_flag::required));
+		cdm1_test_put_u32be(metadata, entry + 8, section_offset);
+		cdm1_test_put_u32be(metadata, entry + 12, section_length);
+		cdm1_test_put_u32be(metadata, entry + 16, record_counts[i]);
+		cdm1_test_put_u32be(metadata, entry + 20, 0);
+
+		cdm1_test_put_u32be(
+				metadata,
+				section_offset + 0,
+				record_sizes[i]);
+		cdm1_test_put_u32be(
+				metadata,
+				section_offset + 4,
+				record_counts[i]);
+		cdm1_test_put_u32be(metadata, section_offset + 8, 0);
+		cdm1_test_put_u32be(metadata, section_offset + 12, 0);
+
+		section_offset += section_length;
+	}
+
+	return metadata;
+}
+
 TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 {
-	auto put_u16be = [] (std::vector<uint8_t> &data, size_t offset, uint16_t value)
-	{
-		data[offset + 0] = uint8_t(value >> 8);
-		data[offset + 1] = uint8_t(value);
-	};
-
-	auto put_u32be = [] (std::vector<uint8_t> &data, size_t offset, uint32_t value)
-	{
-		data[offset + 0] = uint8_t(value >> 24);
-		data[offset + 1] = uint8_t(value >> 16);
-		data[offset + 2] = uint8_t(value >> 8);
-		data[offset + 3] = uint8_t(value);
-	};
-
-	auto make_valid_metadata = [&] ()
-	{
-		constexpr uint32_t section_count = 7;
-		constexpr uint32_t directory_offset =
-				cdrom_file::CDM1_HEADER_BYTES;
-		constexpr uint32_t directory_bytes =
-				section_count * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
-		constexpr uint32_t first_section_offset =
-				directory_offset + directory_bytes;
-		constexpr uint32_t section_length = 8;
-		constexpr uint32_t total_bytes =
-				first_section_offset + section_count * section_length;
-
-		std::vector<uint8_t> metadata(total_bytes, 0);
-
-		put_u32be(metadata, 0, cdrom_file::CDM1_MAGIC);
-		put_u16be(metadata, 4, cdrom_file::CDM1_VERSION_MAJOR);
-		put_u16be(metadata, 6, cdrom_file::CDM1_VERSION_MINOR);
-		put_u32be(metadata, 8, cdrom_file::CDM1_HEADER_BYTES);
-		put_u32be(metadata, 12, total_bytes);
-		put_u32be(metadata, 16, section_count);
-		put_u32be(metadata, 20, directory_offset);
-
-		const std::array<cdrom_file::cdm1_section, section_count> sections =
-		{
-			cdrom_file::cdm1_section::disc,
-			cdrom_file::cdm1_section::sessions,
-			cdrom_file::cdm1_section::tracks,
-			cdrom_file::cdm1_section::indexes,
-			cdrom_file::cdm1_section::regions,
-			cdrom_file::cdm1_section::evidence,
-			cdrom_file::cdm1_section::mappings
-		};
-
-		for (uint32_t i = 0; i < section_count; i++)
-		{
-			const uint32_t entry =
-					directory_offset
-						+ i * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
-
-			put_u32be(metadata, entry + 0, uint32_t(sections[i]));
-			put_u16be(metadata, entry + 4, 1);
-			put_u16be(
-					metadata,
-					entry + 6,
-					uint16_t(cdrom_file::cdm1_section_flag::required));
-			put_u32be(
-					metadata,
-					entry + 8,
-					first_section_offset + i * section_length);
-			put_u32be(metadata, entry + 12, section_length);
-			put_u32be(metadata, entry + 16, 0);
-			put_u32be(metadata, entry + 20, 0);
-		}
-
-		return metadata;
-	};
 
 	SECTION("valid canonical directory")
 	{
-		const std::vector<uint8_t> metadata = make_valid_metadata();
+		const std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
 		REQUIRE_FALSE(cdrom_file::validate_cdm1_metadata(metadata));
 	}
 
@@ -3715,7 +3757,7 @@ TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 
 	SECTION("wrong magic")
 	{
-		std::vector<uint8_t> metadata = make_valid_metadata();
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
 		metadata[0] ^= 0x01;
 
 		REQUIRE(
@@ -3725,8 +3767,8 @@ TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 
 	SECTION("unsupported major version")
 	{
-		std::vector<uint8_t> metadata = make_valid_metadata();
-		put_u16be(
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+		cdm1_test_put_u16be(
 				metadata,
 				4,
 				cdrom_file::CDM1_VERSION_MAJOR + 1);
@@ -3738,8 +3780,8 @@ TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 
 	SECTION("incorrect total size")
 	{
-		std::vector<uint8_t> metadata = make_valid_metadata();
-		put_u32be(metadata, 12, uint32_t(metadata.size() - 1));
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+		cdm1_test_put_u32be(metadata, 12, uint32_t(metadata.size() - 1));
 
 		REQUIRE(
 				cdrom_file::validate_cdm1_metadata(metadata)
@@ -3748,8 +3790,8 @@ TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 
 	SECTION("nonzero header flags")
 	{
-		std::vector<uint8_t> metadata = make_valid_metadata();
-		put_u32be(metadata, 24, 1);
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+		cdm1_test_put_u32be(metadata, 24, 1);
 
 		REQUIRE(
 				cdrom_file::validate_cdm1_metadata(metadata)
@@ -3758,8 +3800,8 @@ TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 
 	SECTION("nonzero reserved header field")
 	{
-		std::vector<uint8_t> metadata = make_valid_metadata();
-		put_u32be(metadata, 28, 1);
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+		cdm1_test_put_u32be(metadata, 28, 1);
 
 		REQUIRE(
 				cdrom_file::validate_cdm1_metadata(metadata)
@@ -3768,8 +3810,8 @@ TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 
 	SECTION("too few required sections")
 	{
-		std::vector<uint8_t> metadata = make_valid_metadata();
-		put_u32be(metadata, 16, 6);
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+		cdm1_test_put_u32be(metadata, 16, 6);
 
 		REQUIRE(
 				cdrom_file::validate_cdm1_metadata(metadata)
@@ -3778,8 +3820,8 @@ TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 
 	SECTION("misaligned directory")
 	{
-		std::vector<uint8_t> metadata = make_valid_metadata();
-		put_u32be(metadata, 20, cdrom_file::CDM1_HEADER_BYTES + 1);
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+		cdm1_test_put_u32be(metadata, 20, cdrom_file::CDM1_HEADER_BYTES + 1);
 
 		REQUIRE(
 				cdrom_file::validate_cdm1_metadata(metadata)
@@ -3788,9 +3830,9 @@ TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 
 	SECTION("required section in wrong order")
 	{
-		std::vector<uint8_t> metadata = make_valid_metadata();
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
 
-		put_u32be(
+		cdm1_test_put_u32be(
 				metadata,
 				cdrom_file::CDM1_HEADER_BYTES,
 				uint32_t(cdrom_file::cdm1_section::tracks));
@@ -3802,9 +3844,9 @@ TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 
 	SECTION("required section missing required flag")
 	{
-		std::vector<uint8_t> metadata = make_valid_metadata();
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
 
-		put_u16be(
+		cdm1_test_put_u16be(
 				metadata,
 				cdrom_file::CDM1_HEADER_BYTES + 6,
 				0);
@@ -3816,9 +3858,9 @@ TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 
 	SECTION("unknown section flag")
 	{
-		std::vector<uint8_t> metadata = make_valid_metadata();
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
 
-		put_u16be(
+		cdm1_test_put_u16be(
 				metadata,
 				cdrom_file::CDM1_HEADER_BYTES + 6,
 				0x0003);
@@ -3830,9 +3872,9 @@ TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 
 	SECTION("section overlaps directory")
 	{
-		std::vector<uint8_t> metadata = make_valid_metadata();
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
 
-		put_u32be(
+		cdm1_test_put_u32be(
 				metadata,
 				cdrom_file::CDM1_HEADER_BYTES + 8,
 				cdrom_file::CDM1_HEADER_BYTES);
@@ -3844,9 +3886,9 @@ TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 
 	SECTION("section extends beyond metadata")
 	{
-		std::vector<uint8_t> metadata = make_valid_metadata();
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
 
-		put_u32be(
+		cdm1_test_put_u32be(
 				metadata,
 				cdrom_file::CDM1_HEADER_BYTES + 12,
 				uint32_t(metadata.size()));
@@ -3858,13 +3900,13 @@ TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 
 	SECTION("duplicate section type")
 	{
-		std::vector<uint8_t> metadata = make_valid_metadata();
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
 
 		const uint32_t second_entry =
 				cdrom_file::CDM1_HEADER_BYTES
 					+ cdrom_file::CDM1_SECTION_ENTRY_BYTES;
 
-		put_u32be(
+		cdm1_test_put_u32be(
 				metadata,
 				second_entry,
 				uint32_t(cdrom_file::cdm1_section::disc));
@@ -3876,7 +3918,7 @@ TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 
 	SECTION("sections overlap")
 	{
-		std::vector<uint8_t> metadata = make_valid_metadata();
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
 
 		const uint32_t first_entry =
 				cdrom_file::CDM1_HEADER_BYTES;
@@ -3889,7 +3931,122 @@ TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 					| (uint32_t(metadata[first_entry + 10]) << 8)
 					| uint32_t(metadata[first_entry + 11]);
 
-		put_u32be(metadata, second_entry + 8, first_offset);
+		cdm1_test_put_u32be(metadata, second_entry + 8, first_offset);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+		SECTION("section shorter than table header")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		cdm1_test_put_u32be(
+				metadata,
+				cdrom_file::CDM1_HEADER_BYTES + 12,
+				cdrom_file::CDM1_TABLE_HEADER_BYTES - 1);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+	SECTION("wrong table record size")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t first_section_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 7 * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
+
+		cdm1_test_put_u32be(
+				metadata,
+				first_section_offset,
+				cdrom_file::CDM1_DISC_RECORD_BYTES + 1);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+	SECTION("table record count disagrees with directory")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t first_section_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 7 * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
+
+		cdm1_test_put_u32be(metadata, first_section_offset + 4, 2);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+	SECTION("nonzero table flags")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t first_section_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 7 * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
+
+		cdm1_test_put_u32be(metadata, first_section_offset + 8, 1);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+	SECTION("nonzero table reserved field")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t first_section_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 7 * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
+
+		cdm1_test_put_u32be(metadata, first_section_offset + 12, 1);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+	SECTION("table length does not match records")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t first_entry =
+				cdrom_file::CDM1_HEADER_BYTES;
+		const uint32_t valid_length =
+				cdrom_file::CDM1_TABLE_HEADER_BYTES
+					+ cdrom_file::CDM1_DISC_RECORD_BYTES;
+
+		cdm1_test_put_u32be(
+				metadata,
+				first_entry + 12,
+				valid_length + 1);
+
+		REQUIRE(
+				cdrom_file::validate_cdm1_metadata(metadata)
+					== chd_file::error::INVALID_DATA);
+	}
+
+	SECTION("DISC must contain exactly one record")
+	{
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
+
+		const uint32_t first_entry =
+				cdrom_file::CDM1_HEADER_BYTES;
+		const uint32_t first_section_offset =
+				cdrom_file::CDM1_HEADER_BYTES
+					+ 7 * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
+
+		cdm1_test_put_u32be(metadata, first_entry + 16, 2);
+		cdm1_test_put_u32be(metadata, first_section_offset + 4, 2);
 
 		REQUIRE(
 				cdrom_file::validate_cdm1_metadata(metadata)
@@ -3899,81 +4056,9 @@ TEST_CASE("CD-ROM CDM1 metadata structure validation", "[util][cdrom]")
 
 TEST_CASE("CD-ROM CDM1 section directory decoding", "[util][cdrom]")
 {
-	auto put_u16be = [] (std::vector<uint8_t> &data, size_t offset, uint16_t value)
-	{
-		data[offset + 0] = uint8_t(value >> 8);
-		data[offset + 1] = uint8_t(value);
-	};
-
-	auto put_u32be = [] (std::vector<uint8_t> &data, size_t offset, uint32_t value)
-	{
-		data[offset + 0] = uint8_t(value >> 24);
-		data[offset + 1] = uint8_t(value >> 16);
-		data[offset + 2] = uint8_t(value >> 8);
-		data[offset + 3] = uint8_t(value);
-	};
-
-	auto make_valid_metadata = [&] ()
-	{
-		constexpr uint32_t section_count = 7;
-		constexpr uint32_t directory_offset =
-				cdrom_file::CDM1_HEADER_BYTES;
-		constexpr uint32_t directory_bytes =
-				section_count * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
-		constexpr uint32_t first_section_offset =
-				directory_offset + directory_bytes;
-		constexpr uint32_t section_length = 8;
-		constexpr uint32_t total_bytes =
-				first_section_offset + section_count * section_length;
-
-		std::vector<uint8_t> metadata(total_bytes, 0);
-
-		put_u32be(metadata, 0, cdrom_file::CDM1_MAGIC);
-		put_u16be(metadata, 4, cdrom_file::CDM1_VERSION_MAJOR);
-		put_u16be(metadata, 6, cdrom_file::CDM1_VERSION_MINOR);
-		put_u32be(metadata, 8, cdrom_file::CDM1_HEADER_BYTES);
-		put_u32be(metadata, 12, total_bytes);
-		put_u32be(metadata, 16, section_count);
-		put_u32be(metadata, 20, directory_offset);
-
-		const std::array<cdrom_file::cdm1_section, section_count> sections =
-		{
-			cdrom_file::cdm1_section::disc,
-			cdrom_file::cdm1_section::sessions,
-			cdrom_file::cdm1_section::tracks,
-			cdrom_file::cdm1_section::indexes,
-			cdrom_file::cdm1_section::regions,
-			cdrom_file::cdm1_section::evidence,
-			cdrom_file::cdm1_section::mappings
-		};
-
-		for (uint32_t i = 0; i < section_count; i++)
-		{
-			const uint32_t entry =
-					directory_offset
-						+ i * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
-
-			put_u32be(metadata, entry + 0, uint32_t(sections[i]));
-			put_u16be(metadata, entry + 4, 1);
-			put_u16be(
-					metadata,
-					entry + 6,
-					uint16_t(cdrom_file::cdm1_section_flag::required));
-			put_u32be(
-					metadata,
-					entry + 8,
-					first_section_offset + i * section_length);
-			put_u32be(metadata, entry + 12, section_length);
-			put_u32be(metadata, entry + 16, i + 1);
-			put_u32be(metadata, entry + 20, 0);
-		}
-
-		return metadata;
-	};
-
 	SECTION("decodes canonical directory")
 	{
-		const std::vector<uint8_t> metadata = make_valid_metadata();
+		const std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
 
 		std::vector<cdrom_file::cdm1_section_descriptor> sections;
 		REQUIRE_FALSE(
@@ -3996,22 +4081,42 @@ TEST_CASE("CD-ROM CDM1 section directory decoding", "[util][cdrom]")
 				cdrom_file::CDM1_HEADER_BYTES
 					+ 7 * cdrom_file::CDM1_SECTION_ENTRY_BYTES;
 
+				const std::array<uint32_t, 7> expected_record_sizes =
+		{
+			cdrom_file::CDM1_DISC_RECORD_BYTES,
+			cdrom_file::CDM1_SESSION_RECORD_BYTES,
+			cdrom_file::CDM1_TRACK_RECORD_BYTES,
+			cdrom_file::CDM1_INDEX_RECORD_BYTES,
+			cdrom_file::CDM1_REGION_RECORD_BYTES,
+			cdrom_file::CDM1_EVIDENCE_RECORD_BYTES,
+			cdrom_file::CDM1_MAPPING_RECORD_BYTES
+		};
+
+		uint32_t expected_offset = first_section_offset;
+
 		for (uint32_t i = 0; i < sections.size(); i++)
 		{
+			const uint32_t expected_count = i + 1;
+			const uint32_t expected_length =
+					cdrom_file::CDM1_TABLE_HEADER_BYTES
+						+ expected_count * expected_record_sizes[i];
+
 			REQUIRE(sections[i].type == uint32_t(expected_types[i]));
 			REQUIRE(sections[i].version == 1);
 			REQUIRE(
 					sections[i].flags
 						== uint16_t(cdrom_file::cdm1_section_flag::required));
-			REQUIRE(sections[i].offset == first_section_offset + i * 8);
-			REQUIRE(sections[i].length == 8);
-			REQUIRE(sections[i].count == i + 1);
+			REQUIRE(sections[i].offset == expected_offset);
+			REQUIRE(sections[i].length == expected_length);
+			REQUIRE(sections[i].count == expected_count);
+
+			expected_offset += expected_length;
 		}
 	}
 
 	SECTION("failed parse leaves output unchanged")
 	{
-		std::vector<uint8_t> metadata = make_valid_metadata();
+		std::vector<uint8_t> metadata = make_valid_cdm1_test_metadata();
 		metadata[0] ^= 0x01;
 
 		std::vector<cdrom_file::cdm1_section_descriptor> sections =
